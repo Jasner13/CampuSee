@@ -151,14 +151,7 @@ export default function CodeVerificationScreen() {
           <View style={styles.supplementalContent}>
             <Text style={styles.supplementalText}>Didn't receive a code?</Text>
             <TouchableOpacity onPress={handleResend} activeOpacity={0.7}>
-              <LinearGradient
-                colors={['#667EEA', '#764BA2']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.resendGradient}
-              >
                 <Text style={styles.resendText}>Resend</Text>
-              </LinearGradient>
             </TouchableOpacity>
           </View>
         </View>
@@ -227,7 +220,7 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     width: '100%',
-    paddingHorizontal: 27,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     justifyContent: 'center',
     alignItems: 'center',

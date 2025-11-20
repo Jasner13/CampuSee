@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   },
   subheaderContainer: {
     width: '100%',
-    paddingHorizontal: 124,
+    paddingHorizontal: 100,
     paddingVertical: 5,
     justifyContent: 'center',
     alignItems: 'center',
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     width: '100%',
-    paddingHorizontal: 59,
+    paddingHorizontal: 40,
     marginTop: 64,
     height: 64,
   },

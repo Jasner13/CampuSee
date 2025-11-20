@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     titleContainer: {
         width: '100%',
         height: 221,
-        paddingHorizontal: 70,
+        paddingHorizontal: 60,
         justifyContent: 'flex-end',
         alignItems: 'center',
         position: 'absolute',
