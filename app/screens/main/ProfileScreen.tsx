@@ -1,17 +1,155 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS } from '../../constants/colors';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { MainTabParamList } from '../../navigation/types';
+import { BottomNav } from '../../components/BottomNav';
+import { PostCard, Post } from '../../components/cards/PostCard';
+import { GRADIENTS, COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 
+type ProfileScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Profile'>;
+
+type TabType = 'myPosts' | 'saved';
+
+const MOCK_MY_POSTS: Post[] = [
+  {
+    id: '1',
+    authorName: 'John Michael Pestaño',
+    authorInitials: 'XX',
+    timestamp: 'Just now',
+    label: 'Event',
+    title: 'Lorem Ipsum Dolor Sit Amet',
+    description: 'Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+  },
+];
+
+const MOCK_SAVED_POSTS: Post[] = [
+  {
+    id: '2',
+    authorName: 'First Last',
+    authorInitials: 'XX',
+    timestamp: 'Just now',
+    label: 'Study',
+    title: 'Lorem Ipsum Dolor Sit Amet',
+    description: 'Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+  },
+];
+
 export default function ProfileScreen() {
+  const navigation = useNavigation<ProfileScreenNavigationProp>();
+  const [activeTab, setActiveTab] = useState<TabType>('myPosts');
+
+  const handleNavigate = (item: 'home' | 'messages' | 'notifications' | 'profile') => {
+    const routeMap = {
+      home: 'Home',
+      messages: 'Messages',
+      notifications: 'Notifications',
+      profile: 'Profile',
+    } as const;
+
+    navigation.navigate(routeMap[item]);
+  };
+
+  const handleCreatePost = () => {
+    navigation.navigate('CreatePost');
+  };
+
+  const handlePostPress = (post: Post) => {
+    console.log('Post pressed:', post.id);
+  };
+
+  const handleSettingsPress = () => {
+    navigation.navigate('Settings');
+  };
+
+  const postsToDisplay = activeTab === 'myPosts' ? MOCK_MY_POSTS : MOCK_SAVED_POSTS;
+
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Profile</Text>
-        <Text style={styles.subtitle}>Coming soon...</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={() => navigation.goBack()}>
+          <Text style={styles.backIcon}>←</Text>
+        </TouchableOpacity>
+        
+        <Text style={styles.headerTitle}>Profile</Text>
+        
+        <TouchableOpacity style={styles.settingsButton} activeOpacity={0.7} onPress={handleSettingsPress}>
+          <Text style={styles.settingsIcon}>⚙️</Text>
+        </TouchableOpacity>
       </View>
-    </SafeAreaView>
+
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Profile Info */}
+        <View style={styles.profileSection}>
+          <View style={styles.avatarContainer}>
+            <LinearGradient 
+              colors={GRADIENTS.primary} 
+              start={{ x: 0, y: 0 }} 
+              end={{ x: 1, y: 1 }} 
+              style={styles.avatar}
+            >
+              <Text style={styles.avatarText}>XX</Text>
+            </LinearGradient>
+            <View style={styles.onlineBadge} />
+          </View>
+
+          <Text style={styles.userName}>John Michael Pestaño</Text>
+          <Text style={styles.userBio}>BS Computer Engineering</Text>
+
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>12</Text>
+              <Text style={styles.statLabel}>POSTS CREATED</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>8</Text>
+              <Text style={styles.statLabel}>FAVORS COMPLETED</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Tabs */}
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'myPosts' && styles.tabActive]}
+            onPress={() => setActiveTab('myPosts')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabText, activeTab === 'myPosts' && styles.tabTextActive]}>
+              My Posts
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'saved' && styles.tabActive]}
+            onPress={() => setActiveTab('saved')}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.tabText, activeTab === 'saved' && styles.tabTextActive]}>
+              Saved
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Posts List */}
+        <View style={styles.postsContainer}>
+          {postsToDisplay.map((post) => (
+            <PostCard key={post.id} post={post} onPress={() => handlePostPress(post)} />
+          ))}
+        </View>
+      </ScrollView>
+
+      <BottomNav selected="profile" onNavigate={handleNavigate} onCreatePost={handleCreatePost} />
+    </View>
   );
 }
 
@@ -20,20 +158,144 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  content: {
-    flex: 1,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 16,
+    backgroundColor: COLORS.backgroundLight,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  title: {
-    fontSize: FONTS.sizes.xxl,
-    fontWeight: '900',
+  backIcon: {
+    fontSize: 24,
     color: COLORS.textPrimary,
-    marginBottom: 8,
   },
-  subtitle: {
-    fontSize: FONTS.sizes.lg,
-    fontWeight: '500',
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  settingsButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingsIcon: {
+    fontSize: 22,
+  },
+  content: {
+    flex: 1,
+  },
+  contentContainer: {
+    paddingBottom: 100,
+  },
+  profileSection: {
+    backgroundColor: COLORS.backgroundLight,
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  avatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: COLORS.textLight,
+  },
+  onlineBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.success,
+    borderWidth: 3,
+    borderColor: COLORS.backgroundLight,
+  },
+  userName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  userBio: {
+    fontSize: 15,
     color: COLORS.textSecondary,
+    marginBottom: 24,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    paddingHorizontal: 20,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textTertiary,
+    letterSpacing: 0.5,
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: COLORS.border,
+    marginHorizontal: 20,
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.backgroundLight,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: {
+    borderBottomColor: COLORS.primary,
+  },
+  tabText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  tabTextActive: {
+    color: COLORS.primary,
+  },
+  postsContainer: {
+    padding: 18,
   },
 });

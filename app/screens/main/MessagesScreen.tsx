@@ -3,9 +3,13 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Svg, Path, Circle, G, Defs, ClipPath, Rect } from 'react-native-svg';
 import { useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { MainTabParamList } from '../../navigation/types';
 import { MessageCard } from '../../components/cards/MessageCard';
 import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
+
+type MessagesScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Messages'>;
 
 interface Message {
   id: string;
@@ -102,7 +106,7 @@ const mockMessages: Message[] = [
 ];
 
 export default function MessagesScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<MessagesScreenNavigationProp>();
 
   const handleBack = () => {
     navigation.goBack();
@@ -113,7 +117,7 @@ export default function MessagesScreen() {
   };
 
   const handleMessagePress = (messageId: string) => {
-    console.log('Message pressed:', messageId);
+    navigation.navigate('MessagesChat', { messageId });
   };
 
   return (

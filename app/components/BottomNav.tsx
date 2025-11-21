@@ -121,9 +121,9 @@ const styles = StyleSheet.create({
     height: 88,
     borderRadius: 44,
     backgroundColor: COLORS.backgroundLight,
-    top: -20,
+    top: -40,
     left: '50%',
-    marginLeft: -44,
+    marginLeft: -20,
   },
   navItem: {
     flex: 1,
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 64,
     height: 64,
-    top: -8,
+    top: -29,
     left: '50%',
     marginLeft: -32,
   },
@@ -144,6 +144,7 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: 25,
   },
   gradientText: {
     height: 16,
