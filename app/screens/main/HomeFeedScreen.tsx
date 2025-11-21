@@ -66,7 +66,7 @@ export const HomeFeedScreen: React.FC = () => {
   };
 
   const handlePostPress = (post: Post) => {
-    console.log('Post pressed:', post.id);
+  navigation.navigate('PostDetails', { post });
   };
 
   return (

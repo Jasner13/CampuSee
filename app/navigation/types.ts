@@ -1,3 +1,4 @@
+// navigation/types.ts
 import type { NavigatorScreenParams } from '@react-navigation/native';
 
 export type AuthStackParamList = {
@@ -10,21 +11,19 @@ export type AuthStackParamList = {
 export type MainTabParamList = {
   Home: undefined;
   Messages: undefined;
+  MessagesChat: { messageId: string };
   CreatePost: undefined;
   Notifications: undefined;
   Profile: undefined;
-};
-
-export type SettingsStackParamList = {
   Settings: undefined;
   EditProfile: undefined;
   ChangePassword: undefined;
+  PostDetails: { post: Post };
 };
 
 export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
   Main: NavigatorScreenParams<MainTabParamList>;
-  Settings: NavigatorScreenParams<SettingsStackParamList>;
   PostDetail: { postId: string };
 };
 
