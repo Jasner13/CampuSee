@@ -21,6 +21,9 @@ export const COLORS = {
 
     // UI Colors
     border: '#E2E8F0',
+    faintGray: '#D3DEE8',
+    mediumGray: '#64748B',
+    lightGray: '#94A3B8',
 
     // Status Colors
     success: '#10B981',

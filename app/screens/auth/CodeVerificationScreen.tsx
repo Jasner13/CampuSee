@@ -1,10 +1,20 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, StatusBar } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, GRADIENTS } from '../../constants/color';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { AuthStackParamList } from '../../navigation/types';
+import { useAuth } from '../../contexts/AuthContext';
+import { COLORS, GRADIENTS } from '../../constants/colors';
 import { Svg, Path, G, Circle, Defs, ClipPath, Rect } from 'react-native-svg';
 
+type CodeVerificationScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'CodeVerification'>;
+type CodeVerificationScreenRouteProp = RouteProp<AuthStackParamList, 'CodeVerification'>;
+
 export default function CodeVerificationScreen() {
+  const navigation = useNavigation<CodeVerificationScreenNavigationProp>();
+  const route = useRoute<CodeVerificationScreenRouteProp>();
+  const { login } = useAuth();
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
@@ -25,15 +35,18 @@ export default function CodeVerificationScreen() {
   };
 
   const handleVerifyAccount = () => {
-    console.log('Verify Account pressed with code:', code.join(''));
+    const fullCode = code.join('');
+    if (fullCode.length === 6) {
+      login();
+    }
   };
 
   const handleResend = () => {
-    console.log('Resend code pressed');
+    console.log('Resend code to:', route.params.email);
   };
 
   const handleBack = () => {
-    console.log('Back pressed');
+    navigation.goBack();
   };
 
   return (
@@ -92,7 +105,7 @@ export default function CodeVerificationScreen() {
 
         <View style={styles.subheaderContainer}>
           <Text style={styles.subheaderText}>We sent a 6-digit code to</Text>
-          <Text style={styles.emailText}>markuu.amatong@cit.edu</Text>
+          <Text style={styles.emailText}>{route.params.email}</Text>
         </View>
 
         <View style={styles.otpContainer}>
@@ -138,14 +151,7 @@ export default function CodeVerificationScreen() {
           <View style={styles.supplementalContent}>
             <Text style={styles.supplementalText}>Didn't receive a code?</Text>
             <TouchableOpacity onPress={handleResend} activeOpacity={0.7}>
-              <LinearGradient
-                colors={['#667EEA', '#764BA2']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.resendGradient}
-              >
                 <Text style={styles.resendText}>Resend</Text>
-              </LinearGradient>
             </TouchableOpacity>
           </View>
         </View>
@@ -214,7 +220,7 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     width: '100%',
-    paddingHorizontal: 27,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     justifyContent: 'center',
     alignItems: 'center',

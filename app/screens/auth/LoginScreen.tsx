@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-
 import {
   View,
   Text,
@@ -11,11 +10,19 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { AuthStackParamList } from '../../navigation/types';
+import { useAuth } from '../../contexts/AuthContext';
 import Svg, { Path, G, Defs, ClipPath, Rect, Circle } from 'react-native-svg';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { COLORS } from '../../constants/colors';
 
-export default function LoginScreen({ navigation }: any) {
+type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
+
+export default function LoginScreen() {
+  const navigation = useNavigation<LoginScreenNavigationProp>();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -140,7 +147,11 @@ export default function LoginScreen({ navigation }: any) {
 
           <View style={styles.loginButtonContainer}>
             <TouchableOpacity
-              onPress={() => {}}
+              onPress={() => {
+                if (email && password) {
+                  login();
+                }
+              }}
               activeOpacity={0.8}
             >
               <LinearGradient
@@ -157,20 +168,20 @@ export default function LoginScreen({ navigation }: any) {
           <View style={styles.signUpContainer}>
             <View style={styles.signUpFrame}>
               <Text style={styles.signUpPrompt}>Don't have an account?</Text>
-              <TouchableOpacity activeOpacity={0.7}>
-                <MaskedView
-                  maskElement={<Text style={styles.signUpText}>Sign Up</Text>}
+              <TouchableOpacity activeOpacity={0.7} onPress={() => navigation.navigate('SignUp')}>
+              <MaskedView
+                maskElement={<Text style={styles.signUpText}>Sign Up</Text>}
+              >
+                <LinearGradient
+                  colors={['#667EEA', '#764BA2']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.gradientTextMask}
                 >
-                  <LinearGradient
-                    colors={['#667EEA', '#764BA2']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.gradientTextMask}
-                  >
-                    <Text style={[styles.signUpText, { opacity: 0 }]}>Sign Up</Text>
-                  </LinearGradient>
-                </MaskedView>
-              </TouchableOpacity>
+                  <Text style={[styles.signUpText, { opacity: 0 }]}>Sign Up</Text>
+                </LinearGradient>
+              </MaskedView>
+            </TouchableOpacity>
             </View>
           </View>
         </SafeAreaView>
@@ -212,7 +223,7 @@ const styles = StyleSheet.create({
   headerContainer: {
     width: '100%',
     height: 56,
-    paddingHorizontal: 50,
+    paddingHorizontal: 88,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 44,
@@ -230,7 +241,7 @@ const styles = StyleSheet.create({
   subheaderContainer: {
     width: '100%',
     height: 33,
-    paddingHorizontal: 100,
+    paddingHorizontal: 116,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 0,
@@ -288,8 +299,8 @@ const styles = StyleSheet.create({
   },
   forgotPasswordContainer: {
     width: '100%',
-    height: 30,
-    paddingLeft: 21,
+    height: 32,
+    paddingLeft: 237,
     paddingRight: 47,
     justifyContent: 'center',
     alignItems: 'flex-end',
@@ -344,13 +355,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Nunito Sans',
     fontSize: 16,
     fontWeight: '500',
- 
   },
   signUpText: {
     textAlign: 'center',
     fontFamily: 'Nunito Sans',
     fontSize: 15,
     fontWeight: '800',
-    marginTop: 4,
   },
 });

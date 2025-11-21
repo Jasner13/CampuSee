@@ -4,11 +4,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 
-export default function EditProfileScreen() {
+export default function PostDetailScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Edit Profile</Text>
+        <Text style={styles.title}>Post Detail</Text>
         <Text style={styles.subtitle}>Coming soon...</Text>
       </View>
     </SafeAreaView>
