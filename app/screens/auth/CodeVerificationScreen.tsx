@@ -5,8 +5,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
-import { COLORS, GRADIENTS } from '../../constants/colors';
-import { Svg, Path, G, Circle, Defs, ClipPath, Rect } from 'react-native-svg';
+import { Svg, Path, G, Defs, ClipPath, Rect } from 'react-native-svg';
 
 type CodeVerificationScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'CodeVerification'>;
 type CodeVerificationScreenRouteProp = RouteProp<AuthStackParamList, 'CodeVerification'>;
@@ -14,7 +13,9 @@ type CodeVerificationScreenRouteProp = RouteProp<AuthStackParamList, 'CodeVerifi
 export default function CodeVerificationScreen() {
   const navigation = useNavigation<CodeVerificationScreenNavigationProp>();
   const route = useRoute<CodeVerificationScreenRouteProp>();
-  const { login } = useAuth();
+
+  const { verifyOtp } = useAuth();
+
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
@@ -34,15 +35,24 @@ export default function CodeVerificationScreen() {
     }
   };
 
-  const handleVerifyAccount = () => {
+  const handleVerifyAccount = async () => {
     const fullCode = code.join('');
     if (fullCode.length === 6) {
-      login();
+      const { error } = await verifyOtp(route.params.email, fullCode);
+      if (error) {
+        alert(error.message);
+      } else {
+        // AuthContext will automatically switch the navigator to Home
+        console.log('Verification successful');
+      }
+    } else {
+      alert('Please enter the full 6-digit code');
     }
   };
 
   const handleResend = () => {
     console.log('Resend code to:', route.params.email);
+    // Optional: Add resend logic here using supabase.auth.resend({ email })
   };
 
   const handleBack = () => {
@@ -151,7 +161,7 @@ export default function CodeVerificationScreen() {
           <View style={styles.supplementalContent}>
             <Text style={styles.supplementalText}>Didn't receive a code?</Text>
             <TouchableOpacity onPress={handleResend} activeOpacity={0.7}>
-                <Text style={styles.resendText}>Resend</Text>
+              <Text style={styles.resendText}>Resend</Text>
             </TouchableOpacity>
           </View>
         </View>

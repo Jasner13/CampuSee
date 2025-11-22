@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
-  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,17 +13,34 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
-import Svg, { Path, G, Defs, ClipPath, Rect, Circle } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import MaskedView from '@react-native-masked-view/masked-view';
-import { COLORS } from '../../constants/colors';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
 export default function LoginScreen() {
   const navigation = useNavigation<LoginScreenNavigationProp>();
   const { login } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      alert("Please enter email and password");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await login(email, password);
+    setLoading(false);
+
+    if (error) {
+      alert(error.message);
+    }
+    // Success logic is handled by AuthContext
+  };
 
   return (
     <View style={styles.container}>
@@ -147,20 +163,17 @@ export default function LoginScreen() {
 
           <View style={styles.loginButtonContainer}>
             <TouchableOpacity
-              onPress={() => {
-                if (email && password) {
-                  login();
-                }
-              }}
+              onPress={handleLogin}
               activeOpacity={0.8}
+              disabled={loading}
             >
               <LinearGradient
                 colors={['#667EEA', '#764BA2']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={styles.loginButton}
+                style={[styles.loginButton, { opacity: loading ? 0.7 : 1 }]}
               >
-                <Text style={styles.loginButtonText}>Log In</Text>
+                <Text style={styles.loginButtonText}>{loading ? 'Logging in...' : 'Log In'}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -169,19 +182,19 @@ export default function LoginScreen() {
             <View style={styles.signUpFrame}>
               <Text style={styles.signUpPrompt}>Don't have an account?</Text>
               <TouchableOpacity activeOpacity={0.7} onPress={() => navigation.navigate('SignUp')}>
-              <MaskedView
-                maskElement={<Text style={styles.signUpText}>Sign Up</Text>}
-              >
-                <LinearGradient
-                  colors={['#667EEA', '#764BA2']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.gradientTextMask}
+                <MaskedView
+                  maskElement={<Text style={styles.signUpText}>Sign Up</Text>}
                 >
-                  <Text style={[styles.signUpText, { opacity: 0 }]}>Sign Up</Text>
-                </LinearGradient>
-              </MaskedView>
-            </TouchableOpacity>
+                  <LinearGradient
+                    colors={['#667EEA', '#764BA2']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.gradientTextMask}
+                  >
+                    <Text style={[styles.signUpText, { opacity: 0 }]}>Sign Up</Text>
+                  </LinearGradient>
+                </MaskedView>
+              </TouchableOpacity>
             </View>
           </View>
         </SafeAreaView>

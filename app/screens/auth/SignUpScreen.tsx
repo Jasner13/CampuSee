@@ -4,18 +4,37 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../../navigation/types';
-import { COLORS, GRADIENTS } from '../../constants/colors';
-import { Svg, Path, G, Circle, Defs, ClipPath, Rect } from 'react-native-svg';
+import { COLORS } from '../../constants/colors';
+import { Svg, Path, G, Defs, ClipPath, Rect } from 'react-native-svg';
+import { useAuth } from '../../contexts/AuthContext';
 
 type SignUpScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'SignUp'>;
 
 export default function SignUpScreen() {
   const navigation = useNavigation<SignUpScreenNavigationProp>();
+  const { signup } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleCreateAccount = () => {
-    navigation.navigate('CodeVerification', { email });
+  const handleCreateAccount = async () => {
+    if (!email || !password) {
+      alert('Please fill in all fields');
+      return;
+    }
+
+    setLoading(true);
+    // Call Supabase
+    const { error } = await signup(email, password);
+    setLoading(false);
+
+    if (error) {
+      alert(error.message);
+    } else {
+      // Only navigate if successful
+      navigation.navigate('CodeVerification', { email });
+    }
   };
 
   const handleBack = () => {
@@ -122,14 +141,14 @@ export default function SignUpScreen() {
         </View>
 
         <View style={styles.buttonContainer}>
-          <TouchableOpacity onPress={handleCreateAccount} activeOpacity={0.8}>
+          <TouchableOpacity onPress={handleCreateAccount} activeOpacity={0.8} disabled={loading}>
             <LinearGradient
               colors={['#667EEA', '#764BA2']}
               start={{ x: 0.2, y: 0 }}
               end={{ x: 0.8, y: 1 }}
-              style={styles.buttonGradient}
+              style={[styles.buttonGradient, { opacity: loading ? 0.7 : 1 }]}
             >
-              <Text style={styles.buttonText}>Create Account</Text>
+              <Text style={styles.buttonText}>{loading ? 'Creating...' : 'Create Account'}</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
