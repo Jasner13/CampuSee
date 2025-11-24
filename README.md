@@ -1,4 +1,4 @@
-![CampuSee Logo](./assets/Logo/3D.png)
+![CampuSee Logo](./assets/Logo/Banner.png)
 
 CampuSee is a student-exclusive digital platform designed to enhance campus communication and resource sharing by providing a secure, centralized hub where university students can quickly access academic support, find lost items, connect with study partners, and obtain help with daily campus needs, fostering collaboration, reducing academic isolation, and improving the overall university experience.
 
