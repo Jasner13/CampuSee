@@ -81,40 +81,6 @@ export default function MessagesScreenChat() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundLight} />
 
-      {/* Status Bar */}
-      <View style={styles.statusBar}>
-        <Text style={styles.time}>06:07</Text>
-        <View style={styles.statusIcons}>
-          <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-            <Path
-              d="M0 4.5525L2 6.5525C6.97 1.5825 15.03 1.5825 20 6.5525L22 4.5525C15.93 -1.5175 6.08 -1.5175 0 4.5525ZM8 12.5525L11 15.5525L14 12.5525C12.35 10.8925 9.66 10.8925 8 12.5525ZM4 8.5525L6 10.5525C8.76 7.7925 13.24 7.7925 16 10.5525L18 8.5525C14.14 4.6925 7.87 4.6925 4 8.5525Z"
-              fill="#64748B"
-              transform="translate(1, 4) scale(0.92)"
-            />
-          </Svg>
-          <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-            <G clipPath="url(#clip0)">
-              <Path d="M2 22H22V2L2 22Z" fill="#64748B" />
-            </G>
-            <Defs>
-              <ClipPath id="clip0">
-                <Rect width={24} height={24} fill="white" />
-              </ClipPath>
-            </Defs>
-          </Svg>
-          <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-            <G clipPath="url(#clip1)">
-              <Path d="M15.67 4H14V2H10V4H8.33C7.6 4 7 4.6 7 5.33V20.66C7 21.4 7.6 22 8.33 22H15.66C16.4 22 17 21.4 17 20.67V5.33C17 4.6 16.4 4 15.67 4Z" fill="#64748B" />
-            </G>
-            <Defs>
-              <ClipPath id="clip1">
-                <Rect width={24} height={24} fill="white" />
-              </ClipPath>
-            </Defs>
-          </Svg>
-        </View>
-      </View>
-
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
@@ -210,29 +176,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.backgroundLight,
   },
-  statusBar: {
-    width: '100%',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    height: 52,
-    backgroundColor: COLORS.backgroundLight,
-  },
-  time: {
-    color: COLORS.textSecondary,
-    fontFamily: 'Roboto',
-    fontSize: 14,
-    fontWeight: '500',
-    lineHeight: 20,
-    letterSpacing: 0.1,
-  },
-  statusIcons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -241,6 +184,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.backgroundLight,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    paddingTop: 50
   },
   backButton: {
     width: 44,
@@ -348,6 +292,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
+    height: 130,
   },
   inputWrapper: {
     flexDirection: 'row',
