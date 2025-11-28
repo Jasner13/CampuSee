@@ -16,7 +16,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../../navigation/types';
 import { COLORS } from '../../constants/colors';
 import { Svg, Path, G, Defs, ClipPath, Rect } from 'react-native-svg';
-import { useAuth } from '../../contexts/AuthContext'; 
+import { useAuth } from '../../contexts/AuthContext';
 
 // --- Dynamic Layout Setup ---
 const { height, width } = Dimensions.get('window');
@@ -38,7 +38,7 @@ interface PrimaryButtonProps {
   onPress: () => void;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
-  children: React.ReactNode; 
+  children: React.ReactNode;
 }
 
 // Hardcoded the gradient colors exactly as provided
@@ -54,16 +54,16 @@ function PrimaryButton({
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled}
-      style={[primaryButtonStyles.container, style]} 
+      style={[primaryButtonStyles.container, style]}
       activeOpacity={0.8}
     >
       <LinearGradient
-        colors={DEFAULT_GRADIENT_COLORS} 
+        colors={DEFAULT_GRADIENT_COLORS}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[primaryButtonStyles.gradient, disabled && primaryButtonStyles.disabled]}
       >
-        {children} 
+        {children}
       </LinearGradient>
     </TouchableOpacity>
   );
@@ -74,7 +74,7 @@ const primaryButtonStyles = StyleSheet.create({
     height: scaleY(64),
     borderRadius: scaleY(20),
     overflow: 'hidden',
-    shadowColor: '#000', 
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: scaleY(8) },
     shadowOpacity: 0.4,
     shadowRadius: scaleY(10),
@@ -112,7 +112,7 @@ export default function SignUpScreen() {
 
   const handleCreateAccount = async () => {
     setMessage('');
-    
+
     if (!email || !password) {
       setMessage('Please fill in all fields');
       return;
@@ -142,9 +142,9 @@ export default function SignUpScreen() {
         end={{ x: 0.5, y: 1 }}
         style={styles.background}
       >
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.backButton, { top: scaleY(64), left: scaleX(32) }]}
-          onPress={handleBack} 
+          onPress={handleBack}
           activeOpacity={0.8}
         >
           <View style={styles.backCircle}>
@@ -180,8 +180,7 @@ export default function SignUpScreen() {
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                  // @ts-ignore
-                  inputAccessoryViewID="none" 
+                  inputAccessoryViewID="none"
                 />
               </View>
             </View>
@@ -202,23 +201,22 @@ export default function SignUpScreen() {
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry
-                  // @ts-ignore
                   inputAccessoryViewID="none"
                 />
               </View>
             </View>
           </View>
-          
+
           {message ? (
-              <Text style={[styles.messageText, { 
-                  marginTop: scaleY(20), 
-                  paddingHorizontal: scaleX(45) 
-              }]}>{message}</Text>
+            <Text style={[styles.messageText, {
+              marginTop: scaleY(20),
+              paddingHorizontal: scaleX(45)
+            }]}>{message}</Text>
           ) : null}
 
 
           {/* Using the locally defined PrimaryButton component */}
-          <View style={[styles.buttonContainer, { 
+          <View style={[styles.buttonContainer, {
             marginTop: message ? scaleY(24) : scaleY(64)
           }]}>
             <PrimaryButton
@@ -251,16 +249,16 @@ const styles = StyleSheet.create({
   background: {
     flex: 1,
   },
-  
+
   contentWrapper: {
     flex: 1,
-    justifyContent: 'center', 
+    justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
-    paddingTop: scaleY(50), 
-    paddingBottom: scaleY(50), 
+    paddingTop: scaleY(50),
+    paddingBottom: scaleY(50),
   },
-  
+
   backButton: {
     position: 'absolute',
     left: scaleX(32),
@@ -276,7 +274,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  
+
   headerContainer: {
     width: '100%',
     paddingVertical: scaleY(6),
@@ -307,7 +305,7 @@ const styles = StyleSheet.create({
     fontSize: scaleY(18),
     fontWeight: '600',
   },
-  
+
   fieldContainer: {
     width: '100%',
     paddingHorizontal: scaleX(45),
@@ -343,20 +341,20 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     height: '100%',
   },
-  
+
   messageText: {
     color: '#FF4136',
     textAlign: 'center',
     fontSize: scaleY(16),
     fontWeight: '700',
   },
-  
+
   buttonContainer: {
     width: '100%',
     paddingHorizontal: scaleX(40),
     height: scaleY(64),
   },
-  
+
   supplementalContainer: {
     width: '100%',
     paddingHorizontal: scaleX(49),

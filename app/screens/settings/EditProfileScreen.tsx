@@ -1,13 +1,23 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, ScrollView, StyleSheet, StatusBar, TouchableOpacity, Alert, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, ScrollView, StyleSheet, StatusBar, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { COLORS } from '../../constants/colors';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { Profile } from '../../types';
 
 export default function EditProfileScreen() {
   const navigation = useNavigation();
-  const [name, setName] = useState('John Lawrence Villamor');
-  const [program, setProgram] = useState('BS Computer Engineering');
-  const [bio, setBio] = useState('I love vibe coding, and femboys! love vibe coding, and femboys! love vibe coding, and femboys! love vibe coding, and femboys...');
+  const { session } = useAuth();
+
+  // State for form fields
+  const [name, setName] = useState('');
+  const [program, setProgram] = useState('');
+  const [bio, setBio] = useState('');
+
+  // UI State
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [showProgramDropdown, setShowProgramDropdown] = useState(false);
 
   const programs = [
@@ -18,16 +28,50 @@ export default function EditProfileScreen() {
     'BS Information Systems',
   ];
 
+  // 1. Fetch Profile Data on Mount
+  useEffect(() => {
+    if (session?.user) {
+      fetchProfile();
+    }
+  }, [session]);
+
+  const fetchProfile = async () => {
+    try {
+      setIsLoading(true);
+      if (!session?.user) throw new Error('No user on the session!');
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setName(data.full_name || '');
+        setProgram(data.program || '');
+        setBio(data.bio || '');
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        Alert.alert('Error', error.message);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleBack = () => {
     navigation.goBack();
   };
 
   const handleChangePhoto = () => {
-    // TODO: Implement image picker
-    Alert.alert('Change Photo', 'Image picker functionality would go here');
+    // Logic for photo upload will be added in a future commit (requires storage bucket)
+    Alert.alert('Coming Soon', 'Photo upload will be implemented in the next sprint.');
   };
 
-  const handleSaveChanges = () => {
+  const handleSaveChanges = async () => {
     if (!name.trim()) {
       Alert.alert('Error', 'Name cannot be empty');
       return;
@@ -38,17 +82,40 @@ export default function EditProfileScreen() {
       return;
     }
 
-    // TODO: Implement actual profile update logic
-    Alert.alert(
-      'Success',
-      'Your profile has been updated successfully',
-      [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        },
-      ]
-    );
+    try {
+      setIsSaving(true);
+      if (!session?.user) throw new Error('No user on the session!');
+
+      // 2. Update Profile in Supabase
+      const updates = {
+        id: session.user.id,
+        full_name: name,
+        program: program,
+        bio: bio,
+        updated_at: new Date(),
+      };
+
+      const { error } = await supabase.from('profiles').upsert(updates);
+
+      if (error) throw error;
+
+      Alert.alert(
+        'Success',
+        'Your profile has been updated successfully',
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]
+      );
+    } catch (error) {
+      if (error instanceof Error) {
+        Alert.alert('Error', error.message);
+      }
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const selectProgram = (selectedProgram: string) => {
@@ -59,6 +126,15 @@ export default function EditProfileScreen() {
   const bioLength = bio.length;
   const maxBioLength = 200;
 
+  // Render Loading State
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -68,13 +144,13 @@ export default function EditProfileScreen() {
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
-        
+
         <Text style={styles.headerTitle}>Edit Profile</Text>
-        
+
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
@@ -83,9 +159,15 @@ export default function EditProfileScreen() {
         <View style={styles.photoSection}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>JL</Text>
+              {/* LOGIC NOTE: 
+                   We display initials based on the name state. 
+                   If name is empty, we show '?' 
+                */}
+              <Text style={styles.avatarText}>
+                {name ? name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase() : '??'}
+              </Text>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.cameraButton}
               onPress={handleChangePhoto}
               activeOpacity={0.8}
@@ -113,13 +195,13 @@ export default function EditProfileScreen() {
         {/* Program Dropdown */}
         <View style={styles.inputSection}>
           <Text style={styles.label}>Program</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.dropdownContainer}
             onPress={() => setShowProgramDropdown(!showProgramDropdown)}
             activeOpacity={0.7}
           >
             <Text style={styles.inputIcon}>🎓</Text>
-            <Text style={styles.dropdownText}>{program}</Text>
+            <Text style={styles.dropdownText}>{program || 'Select Program'}</Text>
             <Text style={styles.dropdownArrow}>▼</Text>
           </TouchableOpacity>
 
@@ -182,12 +264,19 @@ export default function EditProfileScreen() {
 
         {/* Save Changes Button */}
         <TouchableOpacity
-          style={styles.saveButton}
+          style={[styles.saveButton, isSaving && { opacity: 0.7 }]}
           onPress={handleSaveChanges}
           activeOpacity={0.8}
+          disabled={isSaving}
         >
-          <Text style={styles.checkIcon}>✓</Text>
-          <Text style={styles.saveButtonText}>Save Changes</Text>
+          {isSaving ? (
+            <ActivityIndicator size="small" color={COLORS.textLight} />
+          ) : (
+            <>
+              <Text style={styles.checkIcon}>✓</Text>
+              <Text style={styles.saveButtonText}>Save Changes</Text>
+            </>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -198,6 +287,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',

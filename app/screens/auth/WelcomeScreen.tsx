@@ -9,11 +9,8 @@ import { COLORS, GRADIENTS } from '../../constants/colors';
 import PrimaryButton from '../../components/buttons/PrimaryButton';
 import Logo from '../../../assets/Logo/3D.png';
 
-
-// 1. Get the current screen height dynamically
 const { height } = Dimensions.get('window');
-// 2. Define the height the original fixed design was based on (510 + 381 = 891, using 896 as a round base)
-const DESIGN_HEIGHT = 896; 
+const DESIGN_HEIGHT = 896;
 
 type WelcomeScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Welcome'>;
 
@@ -33,9 +30,8 @@ export default function WelcomeScreen() {
             colors={GRADIENTS.primary}
             start={{ x: 0, y: 0 }}
             end={{ x: 0.5, y: 1 }}
-            style={styles.container} // `styles.container` handles horizontal centering
+            style={styles.container}
         >
-            {/* All container positions and heights are now scaled based on screen height */}
             <View style={styles.titleContainer}>
                 <Text style={styles.appName}>
                     <Text style={styles.appNameWhite}>Campu</Text>
@@ -64,10 +60,10 @@ export default function WelcomeScreen() {
                 <View style={styles.contentContainer}>
                     <Text style={styles.welcomeText}>Welcome</Text>
                     <View style={styles.actionsContainer}>
-                        
+
                         <PrimaryButton
                             onPress={handleGetStarted}
-                            style={{ width: 294 }} 
+                            style={{ width: 294 }}
                         >
                             <Text style={styles.buttonText}>Get Started</Text>
                         </PrimaryButton>
@@ -75,13 +71,13 @@ export default function WelcomeScreen() {
                         <View style={styles.loginContainer}>
                             <Text style={styles.loginPrompt}>Already have an account?</Text>
                             <TouchableOpacity onPress={handleLogin} activeOpacity={0.7}>
-                                    <Text style={styles.loginLink}>Log In</Text>
+                                <Text style={styles.loginLink}>Log In</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
             </View>
-            
+
         </LinearGradient>
     );
 }
@@ -89,12 +85,9 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        position: 'relative', 
-        alignItems: 'center', // Handles horizontal centering
+        position: 'relative',
+        alignItems: 'center',
     },
-    
-    // --- Responsive Vertical Positioning ---
-
     titleContainer: {
         width: '100%',
         // Scaled height
@@ -103,41 +96,37 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
         alignItems: 'center',
         position: 'absolute',
-        top: height * (0 / DESIGN_HEIGHT), // top: 0
+        top: height * (0 / DESIGN_HEIGHT),
     },
     taglineContainer: {
         width: '100%',
-        // Scaled height
         height: height * (100 / DESIGN_HEIGHT),
         paddingHorizontal: 30,
         paddingVertical: height * (10 / DESIGN_HEIGHT),
         justifyContent: 'center',
         alignItems: 'center',
         position: 'absolute',
-        // Scaled top: (Original 221)
         top: height * (200 / DESIGN_HEIGHT),
     },
     logoContainer: {
         width: '100%',
-        height: 140, // Keeping logo height fixed to maintain aspect ratio
-        paddingHorizontal: 135, 
+        height: 140,
+        paddingHorizontal: 135,
         justifyContent: 'center',
         alignItems: 'center',
         position: 'absolute',
-        // Scaled top: (Original 319)
         top: height * (310 / DESIGN_HEIGHT),
     },
     actionCardContainer: {
         width: 332,
-        height: 600, // taas para dili ma kita ang border sa bottom
+        height: 600,
         paddingHorizontal: 19,
         paddingTop: 55,
         paddingBottom: 132,
         borderRadius: 40,
         backgroundColor: COLORS.background,
         position: 'absolute',
-        // Scaled top: (Original 510) - This is the critical fix for vertical placement
-        top: height * (510 / DESIGN_HEIGHT), 
+        top: height * (510 / DESIGN_HEIGHT),
         alignItems: 'center',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -145,9 +134,6 @@ const styles = StyleSheet.create({
         shadowRadius: 10,
         elevation: 5,
     },
-    
-    // --- Unchanged Inner Styles ---
-
     appName: {
         textAlign: 'center',
         fontSize: 48,
@@ -200,7 +186,7 @@ const styles = StyleSheet.create({
         top: -1,
     },
     contentContainer: {
-        width: 294, 
+        width: 294,
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
@@ -232,26 +218,19 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         fontSize: 16,
         fontWeight: '500',
-        // 💡 Fix: Increase lineHeight to be greater than fontSize (16 * 1.2 = 19.2)
-        lineHeight: 30, // Try 20, or even 24 for more space
+        lineHeight: 30,
     },
     loginLink: {
         textAlign: 'center',
         fontSize: 15,
         fontWeight: '800',
         color: COLORS.primary,
-        // 💡 Fix: Increase lineHeight to be greater than fontSize (15 * 1.2 = 18)
-        lineHeight: 18, // Try 18, or 20
+        lineHeight: 18,
     },
-
-    // --- loginContainer (Keep as is, or remove padding if you added it) ---
-
     loginContainer: {
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
         gap: 12,
-        // If you added paddingVertical here, you can remove it now, 
-        // as the fix is in the text elements.
     },
 });
