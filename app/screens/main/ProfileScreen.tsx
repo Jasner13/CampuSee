@@ -1,18 +1,21 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { MainTabParamList } from '../../navigation/types';
 import { BottomNav } from '../../components/BottomNav';
 import { PostCard, Post } from '../../components/cards/PostCard';
 import { GRADIENTS, COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 type ProfileScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Profile'>;
 
 type TabType = 'myPosts' | 'saved';
 
+// Mocks kept for now as requested
 const MOCK_MY_POSTS: Post[] = [
   {
     id: '1',
@@ -39,7 +42,64 @@ const MOCK_SAVED_POSTS: Post[] = [
 
 export default function ProfileScreen() {
   const navigation = useNavigation<ProfileScreenNavigationProp>();
+  const { session } = useAuth();
+
   const [activeTab, setActiveTab] = useState<TabType>('myPosts');
+
+  // Dynamic Profile State
+  const [name, setName] = useState('');
+  const [program, setProgram] = useState('');
+  const [initials, setInitials] = useState('??');
+  const [loading, setLoading] = useState(true);
+
+  // Fetch Profile Data whenever screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const fetchProfile = async () => {
+        if (!session?.user) return;
+
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('full_name, program')
+            .eq('id', session.user.id)
+            .single();
+
+          if (error) {
+            console.error('Error fetching profile:', error);
+            return;
+          }
+
+          if (isActive && data) {
+            const fullName = data.full_name || 'Anonymous Student';
+            setName(fullName);
+            setProgram(data.program || 'No Program Selected');
+
+            // Calculate Initials
+            const derivedInitials = fullName
+              .split(' ')
+              .map((n: string) => n[0])
+              .join('')
+              .substring(0, 2)
+              .toUpperCase();
+            setInitials(derivedInitials);
+          }
+        } catch (err) {
+          console.error('Profile fetch error:', err);
+        } finally {
+          if (isActive) setLoading(false);
+        }
+      };
+
+      fetchProfile();
+
+      return () => {
+        isActive = false;
+      };
+    }, [session])
+  );
 
   const handleNavigate = (item: 'home' | 'messages' | 'notifications' | 'profile') => {
     const routeMap = {
@@ -75,35 +135,47 @@ export default function ProfileScreen() {
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={() => navigation.goBack()}>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
-        
+
         <Text style={styles.headerTitle}>Profile</Text>
-        
+
         <TouchableOpacity style={styles.settingsButton} activeOpacity={0.7} onPress={handleSettingsPress}>
           <Text style={styles.settingsIcon}>⚙️</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Info */}
         <View style={styles.profileSection}>
           <View style={styles.avatarContainer}>
-            <LinearGradient 
-              colors={GRADIENTS.primary} 
-              start={{ x: 0, y: 0 }} 
-              end={{ x: 1, y: 1 }} 
+            <LinearGradient
+              colors={GRADIENTS.primary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
               style={styles.avatar}
             >
-              <Text style={styles.avatarText}>XX</Text>
+              {loading ? (
+                <ActivityIndicator color={COLORS.textLight} />
+              ) : (
+                <Text style={styles.avatarText}>{initials}</Text>
+              )}
             </LinearGradient>
             <View style={styles.onlineBadge} />
           </View>
 
-          <Text style={styles.userName}>John Michael Pestaño</Text>
-          <Text style={styles.userBio}>BS Computer Engineering</Text>
+          {loading ? (
+            <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: 10 }} />
+          ) : (
+            <>
+              {/* Dynamic Name */}
+              <Text style={styles.userName}>{name}</Text>
+              {/* Dynamic Program */}
+              <Text style={styles.userBio}>{program}</Text>
+            </>
+          )}
 
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
