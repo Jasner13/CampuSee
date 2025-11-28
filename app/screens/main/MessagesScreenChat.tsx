@@ -1,84 +1,138 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, TextInput } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { MainTabParamList } from '../../navigation/types';
-import { Svg, Path, G, Defs, ClipPath, Rect } from 'react-native-svg';
+import { Svg, Path } from 'react-native-svg';
 import { GRADIENTS, COLORS } from '../../constants/colors';
-import { FONTS } from '../../constants/fonts';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 type MessagesScreenChatNavigationProp = BottomTabNavigationProp<MainTabParamList, 'MessagesChat'>;
+type MessagesScreenChatRouteProp = RouteProp<MainTabParamList, 'MessagesChat'>;
 
-interface ChatMessage {
+// Database Message Shape
+interface Message {
   id: string;
-  text: string;
-  timestamp: string;
-  isSent: boolean;
+  content: string;
+  sender_id: string;
+  receiver_id: string;
+  created_at: string;
 }
-
-const MOCK_CHAT_MESSAGES: ChatMessage[] = [
-  {
-    id: '1',
-    text: 'Hello! Do you want to play gatcha life with me? No? 😅 ok... who am i anyway for you to say yes to that funny request. You can just leave me be and i\'ll be fine. Have a good one.',
-    timestamp: '17:11',
-    isSent: false,
-  },
-  {
-    id: '2',
-    text: 'Who is this?',
-    timestamp: '17:15',
-    isSent: true,
-  },
-  {
-    id: '3',
-    text: 'Wait sorry LOL wrong send. I was supposed to send this to sir Julian',
-    timestamp: '17:16',
-    isSent: false,
-  },
-  {
-    id: '4',
-    text: 'Actually',
-    timestamp: '17:16',
-    isSent: false,
-  },
-  {
-    id: '5',
-    text: 'Leave me alone',
-    timestamp: '17:18',
-    isSent: true,
-  },
-  {
-    id: '6',
-    text: 'or else',
-    timestamp: '17:18',
-    isSent: true,
-  },
-  {
-    id: '7',
-    text: 'im calling the police',
-    timestamp: '17:18',
-    isSent: true,
-  },
-];
 
 export default function MessagesScreenChat() {
   const navigation = useNavigation<MessagesScreenChatNavigationProp>();
+  const route = useRoute<MessagesScreenChatRouteProp>();
+  const { session } = useAuth();
+
+  // Get peer details passed from the Inbox screen
+  const { peerId, peerName, peerInitials } = route.params;
+
+  const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const handleBack = () => {
-    navigation.navigate('Messages');
+    navigation.goBack();
   };
 
-  const handleSend = () => {
-    if (messageText.trim()) {
-      console.log('Sending message:', messageText);
-      setMessageText('');
+  // 1. Fetch Message History
+  const fetchMessages = async () => {
+    if (!session?.user) return;
+
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${peerId}),and(sender_id.eq.${peerId},receiver_id.eq.${session.user.id})`)
+      .order('created_at', { ascending: true });
+
+    if (!error && data) {
+      setMessages(data);
+      setLoading(false);
     }
   };
 
+  // 2. Subscribe to Realtime New Messages
+  useEffect(() => {
+    fetchMessages();
+
+    const channel = supabase
+      .channel(`chat:${peerId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${session?.user?.id}` // Only listen for msgs sent TO me (my sends are handled optimistically or by re-fetch)
+        },
+        (payload) => {
+          // If the message is from the person I'm currently chatting with
+          if (payload.new.sender_id === peerId) {
+            setMessages((prev) => [...prev, payload.new as Message]);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [peerId, session]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  }, [messages]);
+
+  // 3. Handle Send
+  const handleSend = async () => {
+    if (!messageText.trim() || !session?.user || sending) return;
+
+    setSending(true);
+    const textToSend = messageText.trim();
+    setMessageText(''); // Clear input immediately for better UX
+
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({
+          content: textToSend,
+          sender_id: session.user.id,
+          receiver_id: peerId,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setMessages((prev) => [...prev, data]);
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setMessageText(textToSend); // Restore text on error
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const formatTime = (isoString: string) => {
+    return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+    >
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundLight} />
 
       {/* Header */}
@@ -88,62 +142,73 @@ export default function MessagesScreenChat() {
             <Path d="M18 24L10 16L18 8" stroke="#64748B" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
           </Svg>
         </TouchableOpacity>
-        
+
         <View style={styles.headerCenter}>
           <View style={styles.avatarContainer}>
-            <LinearGradient 
-              colors={GRADIENTS.primary} 
-              start={{ x: 0, y: 0 }} 
-              end={{ x: 1, y: 1 }} 
+            <LinearGradient
+              colors={GRADIENTS.primary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
               style={styles.avatar}
             >
-              <Text style={styles.avatarText}>XX</Text>
+              <Text style={styles.avatarText}>{peerInitials}</Text>
             </LinearGradient>
+            {/* Online status is hardcoded for now until Presence is implemented */}
             <View style={styles.onlineBadge} />
           </View>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerName}>John Michael N. Villamor</Text>
+            <Text style={styles.headerName}>{peerName}</Text>
             <Text style={styles.headerStatus}>Active now</Text>
           </View>
         </View>
       </View>
 
       {/* Chat Messages */}
-      <ScrollView 
-        style={styles.chatContainer}
-        contentContainerStyle={styles.chatContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {MOCK_CHAT_MESSAGES.map((message, index) => {
-          const showTimestamp = index === 0 || 
-            MOCK_CHAT_MESSAGES[index - 1]?.timestamp !== message.timestamp ||
-            MOCK_CHAT_MESSAGES[index - 1]?.isSent !== message.isSent;
+      {loading ? (
+        <View style={[styles.chatContainer, { justifyContent: 'center' }]}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      ) : (
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.chatContainer}
+          contentContainerStyle={styles.chatContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {messages.map((message, index) => {
+            const isSentByMe = message.sender_id === session?.user?.id;
 
-          return (
-            <View key={message.id}>
-              <View style={[
-                styles.messageBubble,
-                message.isSent ? styles.messageBubbleSent : styles.messageBubbleReceived
-              ]}>
-                <Text style={[
-                  styles.messageText,
-                  message.isSent ? styles.messageTextSent : styles.messageTextReceived
+            // Logic to group timestamps (show if first msg, or different time/sender from prev)
+            const showTimestamp = index === 0 ||
+              new Date(messages[index - 1].created_at).getMinutes() !== new Date(message.created_at).getMinutes() ||
+              messages[index - 1].sender_id !== message.sender_id;
+
+            return (
+              <View key={message.id}>
+                <View style={[
+                  styles.messageBubble,
+                  isSentByMe ? styles.messageBubbleSent : styles.messageBubbleReceived
                 ]}>
-                  {message.text}
-                </Text>
+                  <Text style={[
+                    styles.messageText,
+                    isSentByMe ? styles.messageTextSent : styles.messageTextReceived
+                  ]}>
+                    {message.content}
+                  </Text>
+                </View>
+                {showTimestamp && (
+                  <Text style={[
+                    styles.messageTimestamp,
+                    isSentByMe ? styles.messageTimestampSent : styles.messageTimestampReceived
+                  ]}>
+                    {formatTime(message.created_at)}
+                  </Text>
+                )}
               </View>
-              {showTimestamp && (
-                <Text style={[
-                  styles.messageTimestamp,
-                  message.isSent ? styles.messageTimestampSent : styles.messageTimestampReceived
-                ]}>
-                  {message.timestamp}
-                </Text>
-              )}
-            </View>
-          );
-        })}
-      </ScrollView>
+            );
+          })}
+        </ScrollView>
+      )}
 
       {/* Message Input */}
       <View style={styles.inputContainer}>
@@ -156,10 +221,11 @@ export default function MessagesScreenChat() {
             onChangeText={setMessageText}
             multiline
           />
-          <TouchableOpacity 
-            style={styles.sendButton}
+          <TouchableOpacity
+            style={[styles.sendButton, (!messageText.trim() || sending) && { opacity: 0.5 }]}
             onPress={handleSend}
             activeOpacity={0.8}
+            disabled={!messageText.trim() || sending}
           >
             <Svg width={20} height={20} viewBox="0 0 20 20" fill="none">
               <Path d="M2.5 10L17.5 2.5L10 17.5L8.125 11.25L2.5 10Z" fill="white" stroke="white" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
@@ -167,7 +233,7 @@ export default function MessagesScreenChat() {
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -292,7 +358,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    height: 130,
+    minHeight: 80, // Slightly reduced to look better with keyboard
+    paddingBottom: 30, // Extra padding for safety
   },
   inputWrapper: {
     flexDirection: 'row',

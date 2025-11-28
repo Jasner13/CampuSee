@@ -1,5 +1,6 @@
 // navigation/types.ts
 import type { NavigatorScreenParams } from '@react-navigation/native';
+import { Post } from '../components/cards/PostCard'; // Ensure Post is imported if used
 
 export type AuthStackParamList = {
   Welcome: undefined;
@@ -11,7 +12,11 @@ export type AuthStackParamList = {
 export type MainTabParamList = {
   Home: undefined;
   Messages: undefined;
-  MessagesChat: { messageId: string };
+  MessagesChat: {
+    peerId: string;
+    peerName: string;
+    peerInitials: string;
+  };
   CreatePost: undefined;
   Notifications: undefined;
   Profile: undefined;
@@ -29,6 +34,6 @@ export type RootStackParamList = {
 
 declare global {
   namespace ReactNavigation {
-    interface RootParamList extends RootStackParamList {}
+    interface RootParamList extends RootStackParamList { }
   }
 }
