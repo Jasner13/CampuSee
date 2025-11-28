@@ -1,37 +1,98 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, Switch } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, Switch, Alert, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { MainTabParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants/colors';
-import { FONTS } from '../../constants/fonts';
+import { supabase } from '../../lib/supabase';
 
 type SettingsScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Settings'>;
 
+// Define the shape of our settings JSON
+interface UserSettings {
+  replies_to_posts: boolean;
+  new_messages: boolean;
+  post_interactions: boolean;
+}
+
+const DEFAULT_SETTINGS: UserSettings = {
+  replies_to_posts: true,
+  new_messages: true,
+  post_interactions: true,
+};
+
 export default function SettingsScreen() {
   const navigation = useNavigation<SettingsScreenNavigationProp>();
-  const { logout } = useAuth();
-  const [repliesToPosts, setRepliesToPosts] = useState(true);
-  const [newMessages, setNewMessages] = useState(true);
-  const [postInteractions, setPostInteractions] = useState(true);
+  const { logout, session } = useAuth();
+
+  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // 1. Fetch Settings on Load
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    if (!session?.user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('settings')
+        .eq('id', session.user.id)
+        .single();
+
+      if (error) throw error;
+
+      if (data?.settings) {
+        // Merge with defaults in case we add new keys later
+        setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
+      }
+    } catch (error) {
+      console.log('Error loading settings:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 2. Generic Toggle Handler
+  const toggleSetting = async (key: keyof UserSettings, value: boolean) => {
+    // Optimistic Update: Update UI immediately
+    const newSettings = { ...settings, [key]: value };
+    setSettings(newSettings);
+
+    if (!session?.user) return;
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ settings: newSettings })
+        .eq('id', session.user.id);
+
+      if (error) throw error;
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save setting');
+      // Revert on error
+      setSettings(settings);
+    }
+  };
 
   const handleBack = () => {
     navigation.navigate('Profile');
   };
 
   const handleEditProfile = () => {
-    // Navigate to EditProfileScreen
     navigation.navigate('EditProfile' as any);
   };
 
   const handleChangePassword = () => {
-    // Navigate to ChangePasswordScreen
     navigation.navigate('ChangePassword' as any);
   };
 
   const handleHelpSupport = () => {
-    console.log('Help & Support pressed');
+    Alert.alert('Support', 'Contact us at support@campusee.edu');
   };
 
   const handleTermsOfService = () => {
@@ -55,165 +116,171 @@ export default function SettingsScreen() {
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
-        
+
         <Text style={styles.headerTitle}>Settings</Text>
-        
+
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView 
-        style={styles.content} 
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Account Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>ACCOUNT</Text>
-          
-          <TouchableOpacity 
-            style={styles.settingItem}
-            onPress={handleEditProfile}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconContainer}>
-              <Text style={styles.icon}>👤</Text>
-            </View>
-            <View style={styles.settingTextContainer}>
-              <Text style={styles.settingTitle}>Edit Profile</Text>
-              <Text style={styles.settingDescription}>Update your name and photo</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.settingItem}
-            onPress={handleChangePassword}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconContainer}>
-              <Text style={styles.icon}>🔒</Text>
-            </View>
-            <View style={styles.settingTextContainer}>
-              <Text style={styles.settingTitle}>Change Password</Text>
-              <Text style={styles.settingDescription}>Keep your account secure</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
+      {isLoading ? (
+        <View style={[styles.content, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
-
-        {/* Notifications Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>NOTIFICATIONS</Text>
-          
-          <View style={styles.settingItem}>
-            <View style={styles.iconContainer}>
-              <Text style={styles.icon}>💬</Text>
-            </View>
-            <View style={styles.settingTextContainer}>
-              <Text style={styles.settingTitle}>Replies to my posts</Text>
-              <Text style={styles.settingDescription}>Get notified when someone replies</Text>
-            </View>
-            <Switch
-              value={repliesToPosts}
-              onValueChange={setRepliesToPosts}
-              trackColor={{ false: COLORS.border, true: COLORS.success }}
-              thumbColor={COLORS.backgroundLight}
-            />
-          </View>
-
-          <View style={styles.settingItem}>
-            <View style={styles.iconContainer}>
-              <Text style={styles.icon}>✉️</Text>
-            </View>
-            <View style={styles.settingTextContainer}>
-              <Text style={styles.settingTitle}>New messages</Text>
-              <Text style={styles.settingDescription}>Get notified about new messages</Text>
-            </View>
-            <Switch
-              value={newMessages}
-              onValueChange={setNewMessages}
-              trackColor={{ false: COLORS.border, true: COLORS.success }}
-              thumbColor={COLORS.backgroundLight}
-            />
-          </View>
-
-          <View style={styles.settingItem}>
-            <View style={styles.iconContainer}>
-              <Text style={styles.icon}>❤️</Text>
-            </View>
-            <View style={styles.settingTextContainer}>
-              <Text style={styles.settingTitle}>Post interactions</Text>
-              <Text style={styles.settingDescription}>Likes and comments on your posts</Text>
-            </View>
-            <Switch
-              value={postInteractions}
-              onValueChange={setPostInteractions}
-              trackColor={{ false: COLORS.border, true: COLORS.success }}
-              thumbColor={COLORS.backgroundLight}
-            />
-          </View>
-        </View>
-
-        {/* About Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>ABOUT</Text>
-          
-          <TouchableOpacity 
-            style={styles.settingItem}
-            onPress={handleHelpSupport}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconContainer}>
-              <Text style={styles.icon}>❓</Text>
-            </View>
-            <View style={styles.settingTextContainer}>
-              <Text style={styles.settingTitle}>Help & Support</Text>
-              <Text style={styles.settingDescription}>FAQs and contact options</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.settingItem}
-            onPress={handleTermsOfService}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconContainer}>
-              <Text style={styles.icon}>📄</Text>
-            </View>
-            <View style={styles.settingTextContainer}>
-              <Text style={styles.settingTitle}>Terms of Service</Text>
-              <Text style={styles.settingDescription}>Read our terms and conditions</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.settingItem}
-            onPress={handlePrivacyPolicy}
-            activeOpacity={0.7}
-          >
-            <View style={styles.iconContainer}>
-              <Text style={styles.icon}>🛡️</Text>
-            </View>
-            <View style={styles.settingTextContainer}>
-              <Text style={styles.settingTitle}>Privacy Policy</Text>
-              <Text style={styles.settingDescription}>How we protect your data</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Log Out Button */}
-        <TouchableOpacity 
-          style={styles.logOutButton}
-          onPress={handleLogOut}
-          activeOpacity={0.8}
+      ) : (
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.logOutIcon}>🚪</Text>
-          <Text style={styles.logOutText}>Log Out</Text>
-        </TouchableOpacity>
-      </ScrollView>
+          {/* Account Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>ACCOUNT</Text>
+
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={handleEditProfile}
+              activeOpacity={0.7}
+            >
+              <View style={styles.iconContainer}>
+                <Text style={styles.icon}>👤</Text>
+              </View>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>Edit Profile</Text>
+                <Text style={styles.settingDescription}>Update your name and photo</Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={handleChangePassword}
+              activeOpacity={0.7}
+            >
+              <View style={styles.iconContainer}>
+                <Text style={styles.icon}>🔒</Text>
+              </View>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>Change Password</Text>
+                <Text style={styles.settingDescription}>Keep your account secure</Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Notifications Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>NOTIFICATIONS</Text>
+
+            <View style={styles.settingItem}>
+              <View style={styles.iconContainer}>
+                <Text style={styles.icon}>💬</Text>
+              </View>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>Replies to my posts</Text>
+                <Text style={styles.settingDescription}>Get notified when someone replies</Text>
+              </View>
+              <Switch
+                value={settings.replies_to_posts}
+                onValueChange={(val) => toggleSetting('replies_to_posts', val)}
+                trackColor={{ false: COLORS.border, true: COLORS.success }}
+                thumbColor={COLORS.backgroundLight}
+              />
+            </View>
+
+            <View style={styles.settingItem}>
+              <View style={styles.iconContainer}>
+                <Text style={styles.icon}>✉️</Text>
+              </View>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>New messages</Text>
+                <Text style={styles.settingDescription}>Get notified about new messages</Text>
+              </View>
+              <Switch
+                value={settings.new_messages}
+                onValueChange={(val) => toggleSetting('new_messages', val)}
+                trackColor={{ false: COLORS.border, true: COLORS.success }}
+                thumbColor={COLORS.backgroundLight}
+              />
+            </View>
+
+            <View style={styles.settingItem}>
+              <View style={styles.iconContainer}>
+                <Text style={styles.icon}>❤️</Text>
+              </View>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>Post interactions</Text>
+                <Text style={styles.settingDescription}>Likes and comments on your posts</Text>
+              </View>
+              <Switch
+                value={settings.post_interactions}
+                onValueChange={(val) => toggleSetting('post_interactions', val)}
+                trackColor={{ false: COLORS.border, true: COLORS.success }}
+                thumbColor={COLORS.backgroundLight}
+              />
+            </View>
+          </View>
+
+          {/* About Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>ABOUT</Text>
+
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={handleHelpSupport}
+              activeOpacity={0.7}
+            >
+              <View style={styles.iconContainer}>
+                <Text style={styles.icon}>❓</Text>
+              </View>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>Help & Support</Text>
+                <Text style={styles.settingDescription}>FAQs and contact options</Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={handleTermsOfService}
+              activeOpacity={0.7}
+            >
+              <View style={styles.iconContainer}>
+                <Text style={styles.icon}>📄</Text>
+              </View>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>Terms of Service</Text>
+                <Text style={styles.settingDescription}>Read our terms and conditions</Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={handlePrivacyPolicy}
+              activeOpacity={0.7}
+            >
+              <View style={styles.iconContainer}>
+                <Text style={styles.icon}>🛡️</Text>
+              </View>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>Privacy Policy</Text>
+                <Text style={styles.settingDescription}>How we protect your data</Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Log Out Button */}
+          <TouchableOpacity
+            style={styles.logOutButton}
+            onPress={handleLogOut}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.logOutIcon}>🚪</Text>
+            <Text style={styles.logOutText}>Log Out</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      )}
     </View>
   );
 }
