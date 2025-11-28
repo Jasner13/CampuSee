@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-  Dimensions, // Added for dynamic sizing
-  StyleProp,
-  ViewStyle,
+    View,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    StyleSheet,
+    StatusBar,
+    Dimensions,
+    StyleProp,
+    ViewStyle,
+    Alert
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,51 +19,41 @@ import type { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import Svg, { Path } from 'react-native-svg';
 import MaskedView from '@react-native-masked-view/masked-view';
+import { supabase } from '../../lib/supabase';
 
 // --- Dynamic Layout Setup ---
 const { height, width } = Dimensions.get('window');
 const DESIGN_HEIGHT = 896;
 const DESIGN_WIDTH = 414;
 
-// Helper function for scaling vertical values
 const scaleY = (value: number) => (height / DESIGN_HEIGHT) * value;
-// Helper function for scaling horizontal values
 const scaleX = (value: number) => (width / DESIGN_WIDTH) * value;
 
-// ===========================================
-// PrimaryButton Component Definition (Simulating an external import)
-// ===========================================
-
+// PrimaryButton Component
 interface PrimaryButtonProps {
     onPress: () => void;
     disabled?: boolean;
     style?: StyleProp<ViewStyle>;
-    children: React.ReactNode; 
+    children: React.ReactNode;
 }
 
-// Hardcoded the gradient colors exactly as provided in the previous component
 const DEFAULT_GRADIENT_COLORS = ['#4F46E5', '#6366F1', '#8B5CF6'] as const;
 
-function PrimaryButton({
-    onPress,
-    disabled = false,
-    style,
-    children
-}: PrimaryButtonProps) {
+function PrimaryButton({ onPress, disabled = false, style, children }: PrimaryButtonProps) {
     return (
         <TouchableOpacity
             onPress={onPress}
             disabled={disabled}
-            style={[primaryButtonStyles.container, style]} 
+            style={[primaryButtonStyles.container, style]}
             activeOpacity={0.8}
         >
             <LinearGradient
-                colors={DEFAULT_GRADIENT_COLORS} 
+                colors={DEFAULT_GRADIENT_COLORS}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={[primaryButtonStyles.gradient, disabled && primaryButtonStyles.disabled]}
             >
-                {children} 
+                {children}
             </LinearGradient>
         </TouchableOpacity>
     );
@@ -73,20 +64,14 @@ const primaryButtonStyles = StyleSheet.create({
         height: scaleY(64),
         borderRadius: scaleY(20),
         overflow: 'hidden',
-        shadowColor: '#000', 
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: scaleY(8) },
         shadowOpacity: 0.4,
         shadowRadius: scaleY(10),
         elevation: 15,
     },
-    gradient: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    disabled: {
-        opacity: 0.5,
-    },
+    gradient: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    disabled: { opacity: 0.5 },
     buttonText: {
         color: '#FFFFFF',
         textAlign: 'center',
@@ -96,28 +81,34 @@ const primaryButtonStyles = StyleSheet.create({
     },
 });
 
-// ===========================================
-// LoginScreen Component (Modified for fixed element flow)
-// ===========================================
-
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
 export default function LoginScreen() {
     const navigation = useNavigation<LoginScreenNavigationProp>();
     const { login } = useAuth();
 
-    // LOGIC: DO NOT CHANGE
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState(''); 
+    const [message, setMessage] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
 
-    // LOGIC: Changed alert() to setMessage()
+    const validateEmail = (email: string) => {
+        // Regex for lastname.firstname@cit.edu
+        const citEmailRegex = /^[a-zA-Z0-9]+\.[a-zA-Z0-9]+@cit\.edu$/;
+        return citEmailRegex.test(email);
+    };
+
     const handleLogin = async () => {
-        setMessage(''); // Clear previous message
-        
+        setMessage('');
+
         if (!email || !password) {
-            setMessage("Please enter your email and password."); // Custom message
+            setMessage("Please enter your email and password.");
+            return;
+        }
+
+        if (!validateEmail(email)) {
+            setMessage("Please use your CIT email (lastname.firstname@cit.edu).");
             return;
         }
 
@@ -126,21 +117,39 @@ export default function LoginScreen() {
         setLoading(false);
 
         if (error) {
-            setMessage(error.message); // Display API error message
+            setMessage(error.message);
         }
-        // Success logic is handled by AuthContext
+    };
+
+    const handleForgotPassword = async () => {
+        if (!email) {
+            Alert.alert('Required', 'Please enter your email address first.');
+            return;
+        }
+        if (!validateEmail(email)) {
+            Alert.alert('Invalid Email', 'Please use your CIT email (lastname.firstname@cit.edu).');
+            return;
+        }
+
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(email);
+            if (error) throw error;
+            Alert.alert('Email Sent', 'Check your inbox for a password reset link.');
+        } catch (error) {
+            if (error instanceof Error) {
+                Alert.alert('Error', error.message);
+            }
+        }
     };
 
     return (
         <View style={styles.container}>
-            {/* Set status bar to translucent and light content for best look */}
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
             <LinearGradient
                 colors={['#667EEA', '#FFFFFF']}
                 locations={[0, 1]}
                 style={styles.gradient}
             >
-                {/* Back Button (Absolute positioning) */}
                 <TouchableOpacity
                     style={[styles.backButton, { top: scaleY(64), left: scaleX(32) }]}
                     onPress={() => navigation.goBack()}
@@ -148,22 +157,13 @@ export default function LoginScreen() {
                 >
                     <View style={styles.backCircle}>
                         <Svg width={scaleX(32)} height={scaleY(32)} viewBox="0 0 32 32" fill="none">
-                            <Path
-                                d="M18 24L10 16L18 8"
-                                stroke="#64748B"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            />
+                            <Path d="M18 24L10 16L18 8" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </Svg>
                     </View>
                 </TouchableOpacity>
 
                 <SafeAreaView style={styles.safeArea} edges={['top']}>
-                    {/* Content Wrapper */}
                     <View style={styles.contentWrapper}>
-
-                        {/* 1. Header and Subheader */}
                         <View style={[styles.headerContainer, { marginTop: scaleY(108) }]}>
                             <Text style={styles.headerText}>Welcome Back!</Text>
                         </View>
@@ -172,30 +172,18 @@ export default function LoginScreen() {
                             <Text style={styles.subheaderText}>Log in to your account</Text>
                         </View>
 
-                        {/* 2. Fields */}
+                        {/* Email Input */}
                         <View style={styles.field1Container}>
                             <Text style={styles.fieldLabel}>University Email</Text>
                             <View style={styles.textField}>
                                 <View style={styles.fieldContent}>
                                     <Svg width={scaleX(24)} height={scaleY(24)} viewBox="0 0 24 24" fill="none">
-                                        <Path
-                                            d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21"
-                                            stroke="#64748B"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                        />
-                                        <Path
-                                            d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z"
-                                            stroke="#64748B"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                        />
+                                        <Path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        <Path d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                                     </Svg>
                                     <TextInput
                                         style={styles.textInput}
-                                        placeholder="Email"
+                                        placeholder="lastname.firstname@cit.edu"
                                         placeholderTextColor="#64748B"
                                         value={email}
                                         onChangeText={setEmail}
@@ -206,25 +194,14 @@ export default function LoginScreen() {
                             </View>
                         </View>
 
+                        {/* Password Input */}
                         <View style={styles.field2Container}>
                             <Text style={styles.fieldLabel}>Password</Text>
                             <View style={styles.textField}>
                                 <View style={styles.fieldContent}>
                                     <Svg width={scaleX(24)} height={scaleY(24)} viewBox="0 0 24 24" fill="none">
-                                        <Path
-                                            d="M19 11H5C3.89543 11 3 11.8954 3 13V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V13C21 11.8954 20.1046 11 19 11Z"
-                                            stroke="#64748B"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                        />
-                                        <Path
-                                            d="M7 11V7C7 5.67392 7.52678 4.40215 8.46447 3.46447C9.40215 2.52678 10.6739 2 12 2C13.3261 2 14.5979 2.52678 15.5355 3.46447C16.4732 4.40215 17 5.67392 17 7V11"
-                                            stroke="#64748B"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                        />
+                                        <Path d="M19 11H5C3.89543 11 3 11.8954 3 13V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V13C21 11.8954 20.1046 11 19 11Z" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        <Path d="M7 11V7C7 5.67392 7.52678 4.40215 8.46447 3.46447C9.40215 2.52678 10.6739 2 12 2C13.3261 2 14.5979 2.52678 15.5355 3.46447C16.4732 4.40215 17 5.67392 17 7V11" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                                     </Svg>
                                     <TextInput
                                         style={styles.textInput}
@@ -232,18 +209,18 @@ export default function LoginScreen() {
                                         placeholderTextColor="#64748B"
                                         value={password}
                                         onChangeText={setPassword}
-                                        secureTextEntry
+                                        secureTextEntry={!showPassword}
                                     />
+                                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                                        <Text style={{ fontSize: 18 }}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                                    </TouchableOpacity>
                                 </View>
                             </View>
                         </View>
-                        
-                        {/* 3. Forgot Password - Must be placed here and remain static */}
+
                         <View style={styles.forgotPasswordContainer}>
-                            <TouchableOpacity activeOpacity={0.7}>
-                                <MaskedView
-                                    maskElement={<Text style={styles.forgotPasswordText}>Forgot Password?</Text>}
-                                >
+                            <TouchableOpacity activeOpacity={0.7} onPress={handleForgotPassword}>
+                                <MaskedView maskElement={<Text style={styles.forgotPasswordText}>Forgot Password?</Text>}>
                                     <LinearGradient
                                         colors={['#667EEA', '#764BA2']}
                                         start={{ x: 0, y: 0 }}
@@ -255,40 +232,24 @@ export default function LoginScreen() {
                                 </MaskedView>
                             </TouchableOpacity>
                         </View>
-                        
-                        {/* 4. Error Message (Conditional visibility) */}
+
                         {message ? (
-                            <Text style={[styles.messageText, { 
-                                marginTop: scaleY(20), 
-                                paddingHorizontal: scaleX(45) 
-                            }]}>
+                            <Text style={[styles.messageText, { marginTop: scaleY(20), paddingHorizontal: scaleX(45) }]}>
                                 {message}
                             </Text>
                         ) : null}
 
-                        {/* 5. Log In Button (Margin depends on message) */}
-                        <View style={[styles.loginButtonContainer, { 
-                            // If message is visible, use smaller margin (24)
-                            // If no message is visible, use larger margin to fill the space (60)
-                            marginTop: message ? scaleY(24) : scaleY(60) 
-                        }]}>
-                            <PrimaryButton
-                                onPress={handleLogin}
-                                disabled={loading}
-                                style={{ width: scaleX(294) }}
-                            >
+                        <View style={[styles.loginButtonContainer, { marginTop: message ? scaleY(24) : scaleY(60) }]}>
+                            <PrimaryButton onPress={handleLogin} disabled={loading} style={{ width: scaleX(294) }}>
                                 <Text style={primaryButtonStyles.buttonText}>{loading ? 'Logging in...' : 'Log In'}</Text>
                             </PrimaryButton>
                         </View>
 
-                        {/* 6. Sign Up Link */}
                         <View style={styles.signUpContainer}>
                             <View style={styles.signUpFrame}>
                                 <Text style={styles.signUpPrompt}>Don't have an account?</Text>
                                 <TouchableOpacity activeOpacity={0.7} onPress={() => navigation.navigate('SignUp')}>
-                                    <MaskedView
-                                        maskElement={<Text style={styles.signUpText}>Sign Up</Text>}
-                                    >
+                                    <MaskedView maskElement={<Text style={styles.signUpText}>Sign Up</Text>}>
                                         <LinearGradient
                                             colors={['#667EEA', '#764BA2']}
                                             start={{ x: 0, y: 0 }}
@@ -345,7 +306,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: scaleX(88),
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: scaleY(108), 
     },
     headerText: {
         color: '#FFFFFF',
@@ -363,7 +323,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: scaleX(116),
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: scaleY(0),
     },
     subheaderText: {
         color: '#FFFFFF',
@@ -418,7 +377,6 @@ const styles = StyleSheet.create({
         paddingVertical: 0,
         height: scaleY(60),
     },
-    // Error message style
     messageText: {
         color: '#FF4136',
         textAlign: 'center',
@@ -432,7 +390,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'flex-end',
         marginTop: scaleY(8),
-        // This container is now placed *before* the message
     },
     gradientTextMask: {
         height: scaleY(25),
@@ -448,7 +405,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: scaleX(59),
         justifyContent: 'center',
         alignItems: 'center',
-        // Margin calculated to account for message height (or lack thereof)
     },
     signUpContainer: {
         width: '100%',
