@@ -1,16 +1,22 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, ScrollView, StyleSheet, StatusBar, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TextInput, ScrollView, StyleSheet, StatusBar, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { COLORS } from '../../constants/colors';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function ChangePasswordScreen() {
   const navigation = useNavigation();
+  const { session } = useAuth();
+
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleBack = () => {
     navigation.goBack();
@@ -45,7 +51,7 @@ export default function ChangePasswordScreen() {
 
   const passwordsMatch = newPassword === confirmPassword && confirmPassword.length > 0;
 
-  const handleSaveChanges = () => {
+  const handleSaveChanges = async () => {
     if (!currentPassword) {
       Alert.alert('Error', 'Please enter your current password');
       return;
@@ -66,17 +72,50 @@ export default function ChangePasswordScreen() {
       return;
     }
 
-    // TODO: Implement actual password change logic
-    Alert.alert(
-      'Success',
-      'Your password has been changed successfully. You will be logged out of all devices.',
-      [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        },
-      ]
-    );
+    if (!session?.user?.email) {
+      Alert.alert('Error', 'User session not found');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      // 1. Verify Current Password by re-authenticating
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: session.user.email,
+        password: currentPassword,
+      });
+
+      if (signInError) {
+        Alert.alert('Error', 'Incorrect current password');
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Update to New Password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) throw updateError;
+
+      Alert.alert(
+        'Success',
+        'Your password has been changed successfully.',
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]
+      );
+    } catch (error) {
+      if (error instanceof Error) {
+        Alert.alert('Error', error.message);
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -88,13 +127,13 @@ export default function ChangePasswordScreen() {
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
-        
+
         <Text style={styles.headerTitle}>Change Password</Text>
-        
+
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
@@ -102,7 +141,7 @@ export default function ChangePasswordScreen() {
         {/* Info Banner */}
         <View style={styles.infoBanner}>
           <Text style={styles.infoText}>
-            For your Security, choose a strong password that you haven't used elsewhere. You'll be logged out of all devices after changing your password
+            For your Security, choose a strong password that you haven't used elsewhere.
           </Text>
         </View>
 
@@ -236,14 +275,20 @@ export default function ChangePasswordScreen() {
         <TouchableOpacity
           style={[
             styles.saveButton,
-            (!allChecksPassed || !passwordsMatch || !currentPassword) && styles.saveButtonDisabled
+            (!allChecksPassed || !passwordsMatch || !currentPassword || isLoading) && styles.saveButtonDisabled
           ]}
           onPress={handleSaveChanges}
           activeOpacity={0.8}
-          disabled={!allChecksPassed || !passwordsMatch || !currentPassword}
+          disabled={!allChecksPassed || !passwordsMatch || !currentPassword || isLoading}
         >
-          <Text style={styles.checkIcon}>✓</Text>
-          <Text style={styles.saveButtonText}>Save Changes</Text>
+          {isLoading ? (
+            <ActivityIndicator size="small" color={COLORS.textLight} />
+          ) : (
+            <>
+              <Text style={styles.checkIcon}>✓</Text>
+              <Text style={styles.saveButtonText}>Save Changes</Text>
+            </>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </View>
