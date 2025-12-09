@@ -10,6 +10,8 @@ import { GRADIENTS, COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+// Import the new Profile interface
+import { Profile } from '../../types'; //
 
 type ProfileScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Profile'>;
 
@@ -47,8 +49,8 @@ export default function ProfileScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('myPosts');
 
   // Dynamic Profile State
-  const [name, setName] = useState('');
-  const [program, setProgram] = useState('');
+  // Combined all profile data into a single state object
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [initials, setInitials] = useState('??');
   const [loading, setLoading] = useState(true);
 
@@ -63,7 +65,8 @@ export default function ProfileScreen() {
         try {
           const { data, error } = await supabase
             .from('profiles')
-            .select('full_name, program')
+            // Fetch all fields defined in the Profile interface (using '*')
+            .select('*')
             .eq('id', session.user.id)
             .single();
 
@@ -73,11 +76,12 @@ export default function ProfileScreen() {
           }
 
           if (isActive && data) {
-            const fullName = data.full_name || 'Anonymous Student';
-            setName(fullName);
-            setProgram(data.program || 'No Program Selected');
+            // Set the entire profile data object
+            setProfile(data as Profile);
 
-            // Calculate Initials
+            const fullName = data.full_name || 'Anonymous Student';
+
+            // Calculate Initials from the fetched name
             const derivedInitials = fullName
               .split(' ')
               .map((n: string) => n[0])
@@ -130,7 +134,7 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header */}
+      {/* Header (No changes here) */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={() => navigation.goBack()}>
           <Text style={styles.backIcon}>←</Text>
@@ -170,10 +174,10 @@ export default function ProfileScreen() {
             <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: 10 }} />
           ) : (
             <>
-              {/* Dynamic Name */}
-              <Text style={styles.userName}>{name}</Text>
-              {/* Dynamic Program */}
-              <Text style={styles.userBio}>{program}</Text>
+              {/* Dynamic Name from fetched data */}
+              <Text style={styles.userName}>{profile?.full_name || 'Anonymous Student'}</Text>
+              {/* Dynamic Program from fetched data */}
+              <Text style={styles.userBio}>{profile?.program || 'No Program Selected'}</Text>
             </>
           )}
 
@@ -190,7 +194,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Tabs */}
+        {/* Tabs (No changes here) */}
         <View style={styles.tabsContainer}>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'myPosts' && styles.tabActive]}
@@ -212,7 +216,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Posts List */}
+        {/* Posts List (Uses MOCK data) */}
         <View style={styles.postsContainer}>
           {postsToDisplay.map((post) => (
             <PostCard key={post.id} post={post} onPress={() => handlePostPress(post)} />

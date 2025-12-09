@@ -1,6 +1,6 @@
 // navigation/types.ts
 import type { NavigatorScreenParams } from '@react-navigation/native';
-import { Post } from '../components/cards/PostCard'; // Ensure Post is imported if used
+import { Post } from '../components/cards/PostCard';
 
 export type AuthStackParamList = {
   Welcome: undefined;
