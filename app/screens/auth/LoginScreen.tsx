@@ -94,9 +94,10 @@ export default function LoginScreen() {
     const [showPassword, setShowPassword] = useState(false);
 
     const validateEmail = (email: string) => {
-        // Regex for lastname.firstname@cit.edu
-        const citEmailRegex = /^[a-zA-Z0-9]+\.[a-zA-Z0-9]+@cit\.edu$/;
-        return citEmailRegex.test(email);
+        // Allows CIT institutional email OR any Gmail address
+        const citRegex = /^[a-zA-Z0-9]+\.[a-zA-Z0-9]+@cit\.edu$/;
+        const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+        return citRegex.test(email) || gmailRegex.test(email);
     };
 
     const handleLogin = async () => {
@@ -108,7 +109,7 @@ export default function LoginScreen() {
         }
 
         if (!validateEmail(email)) {
-            setMessage("Please use your CIT email (lastname.firstname@cit.edu).");
+            setMessage("Please use a valid CIT email or Gmail account.");
             return;
         }
 
@@ -127,7 +128,7 @@ export default function LoginScreen() {
             return;
         }
         if (!validateEmail(email)) {
-            Alert.alert('Invalid Email', 'Please use your CIT email (lastname.firstname@cit.edu).');
+            Alert.alert('Invalid Email', 'Please use a valid CIT email or Gmail account.');
             return;
         }
 

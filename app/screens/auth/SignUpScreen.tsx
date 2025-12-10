@@ -74,7 +74,10 @@ export default function SignUpScreen() {
   const passwordChecks = validatePassword(password);
 
   const validateEmail = (email: string) => {
-    return /^[a-zA-Z0-9]+\.[a-zA-Z0-9]+@cit\.edu$/.test(email);
+    // Allows CIT institutional email OR any Gmail address
+    const citRegex = /^[a-zA-Z0-9]+\.[a-zA-Z0-9]+@cit\.edu$/;
+    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+    return citRegex.test(email) || gmailRegex.test(email);
   };
 
   const handleCreateAccount = async () => {
@@ -86,7 +89,7 @@ export default function SignUpScreen() {
     }
 
     if (!validateEmail(email)) {
-      setMessage('Please use your CIT email (lastname.firstname@cit.edu).');
+      setMessage('Please use a valid CIT email (lastname.firstname@cit.edu) or a Gmail account.');
       return;
     }
 
