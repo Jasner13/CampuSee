@@ -25,6 +25,15 @@ export interface Message {
     is_read: boolean;
 }
 
+export interface Comment {
+    id: string;
+    created_at: string;
+    content: string;
+    user_id: string;
+    post_id: string;
+    profiles?: Profile; // Joined data
+}
+
 // 2. View Types
 export interface ConversationView {
     peer_id: string;

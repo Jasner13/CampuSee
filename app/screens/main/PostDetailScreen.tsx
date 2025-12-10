@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
-  ScrollView, 
   StyleSheet, 
   StatusBar, 
   TouchableOpacity, 
@@ -12,87 +11,245 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Modal, // Added Modal
-  Image, // Added Image for the modal
-  SafeAreaView // Added for safe rendering in modal
+  Modal,
+  Image,
+  SafeAreaView,
+  FlatList,
+  RefreshControl
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import * as WebBrowser from 'expo-web-browser'; // Added WebBrowser
+import * as WebBrowser from 'expo-web-browser';
 import type { RootStackParamList } from '../../navigation/types';
 import { GRADIENTS, COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Avatar } from '../../components/Avatar';
+import { Comment } from '../../types';
 
 type PostDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'PostDetails'>;
 type PostDetailScreenRouteProp = RouteProp<RootStackParamList, 'PostDetails'>;
-
-interface Reply {
-  id: string;
-  authorName: string;
-  authorInitials: string;
-  timestamp: string;
-  label: string;
-  content: string;
-}
-
-const MOCK_REPLIES: Reply[] = [
-  {
-    id: '1',
-    authorName: 'First Last',
-    authorInitials: 'XX',
-    timestamp: 'Just now',
-    label: 'Label',
-    content: 'This is a sample reply to the post.',
-  },
-];
 
 export default function PostDetailScreen() {
   const navigation = useNavigation<PostDetailScreenNavigationProp>();
   const route = useRoute<PostDetailScreenRouteProp>();
   const { session } = useAuth();
+  const currentUserId = session?.user?.id;
   
   const { post: initialPost } = route.params;
   const [post, setPost] = useState(initialPost);
 
-  useEffect(() => {
-    setPost(initialPost);
-  }, [initialPost]);
-
-  const isOwner = session?.user?.id === post.userId;
-
+  // Interaction State
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [loadingComments, setLoadingComments] = useState(true);
+  const [commentText, setCommentText] = useState('');
+  const [sendingComment, setSendingComment] = useState(false);
+  
+  const [likesCount, setLikesCount] = useState(0); 
+  const [isLiked, setIsLiked] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  
   // Edit State
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(post.title);
   const [editDescription, setEditDescription] = useState(post.description);
   const [isSaving, setIsSaving] = useState(false);
-
-  // Interaction State
-  const [comment, setComment] = useState('');
-  const [likes, setLikes] = useState(1039); 
-  const [isLiked, setIsLiked] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Image Viewer State
   const [imageModalVisible, setImageModalVisible] = useState(false);
 
-  // Helper to extract filename from URL
+  // Determine if file is an image
   const getFileName = (url: string) => {
     try {
         const decoded = decodeURIComponent(url);
-        // Remove any query params
         const cleanUrl = decoded.split('?')[0]; 
         return cleanUrl.split('/').pop() || 'attachment';
     } catch (e) {
         return 'attachment';
     }
   };
+  const fileName = post.fileUrl ? getFileName(post.fileUrl) : '';
+  const isImage = /\.(jpg|jpeg|png|gif|webp|heic)$/i.test(fileName);
+  const isOwner = currentUserId === post.userId;
 
-  const handleBack = () => {
-    navigation.goBack();
+  // --- Initial Data Fetching ---
+  useEffect(() => {
+    fetchComments();
+    fetchInteractionStatus();
+    
+    // Set initial mock likes count (if you want to replace this with real DB count later, you can)
+    // For now we start with 0 or a number, but usually we fetch the count from DB
+    fetchLikesCount();
+  }, [post.id]);
+
+  const fetchComments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('comments')
+        .select('*, profiles(id, full_name, avatar_url, program)')
+        .eq('post_id', post.id)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setComments(data as Comment[]);
+    } catch (error) {
+      console.error('Error fetching comments:', error);
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const fetchLikesCount = async () => {
+    const { count, error } = await supabase
+      .from('post_likes')
+      .select('*', { count: 'exact', head: true })
+      .eq('post_id', post.id);
+    
+    if (!error && count !== null) {
+      setLikesCount(count);
+    }
+  };
+
+  const fetchInteractionStatus = async () => {
+    if (!currentUserId) return;
+
+    // Check Like
+    const { data: likeData } = await supabase
+      .from('post_likes')
+      .select('post_id')
+      .eq('post_id', post.id)
+      .eq('user_id', currentUserId)
+      .single();
+    setIsLiked(!!likeData);
+
+    // Check Save
+    const { data: saveData } = await supabase
+      .from('saved_posts')
+      .select('post_id')
+      .eq('post_id', post.id)
+      .eq('user_id', currentUserId)
+      .single();
+    setIsSaved(!!saveData);
+  };
+
+  // --- Handlers ---
+
+  const handleBack = () => navigation.goBack();
+
+  const handleLike = async () => {
+    if (!currentUserId) return;
+
+    // Optimistic Update
+    const previousLiked = isLiked;
+    const previousCount = likesCount;
+    setIsLiked(!isLiked);
+    setLikesCount(previousLiked ? likesCount - 1 : likesCount + 1);
+
+    try {
+      if (previousLiked) {
+        // Unlike
+        const { error } = await supabase
+          .from('post_likes')
+          .delete()
+          .eq('post_id', post.id)
+          .eq('user_id', currentUserId);
+        if (error) throw error;
+      } else {
+        // Like
+        const { error } = await supabase
+          .from('post_likes')
+          .insert({ post_id: post.id, user_id: currentUserId });
+        if (error) throw error;
+
+        // Send Notification if not owner
+        if (post.userId !== currentUserId) {
+            await supabase.from('notifications').insert({
+                user_id: post.userId, // Recipient
+                actor_id: currentUserId, // Sender
+                type: 'like',
+                title: 'New Like',
+                content: 'Someone liked your post.',
+                is_read: false
+            });
+        }
+      }
+    } catch (error) {
+      console.error('Like error:', error);
+      // Revert on error
+      setIsLiked(previousLiked);
+      setLikesCount(previousCount);
+      Alert.alert('Error', 'Failed to update like status.');
+    }
+  };
+
+  const handleSave = async () => {
+    if (!currentUserId) return;
+    const previousSaved = isSaved;
+    setIsSaved(!isSaved);
+
+    try {
+        if (previousSaved) {
+            // Unsave
+            const { error } = await supabase
+                .from('saved_posts')
+                .delete()
+                .eq('post_id', post.id)
+                .eq('user_id', currentUserId);
+            if (error) throw error;
+        } else {
+            // Save
+            const { error } = await supabase
+                .from('saved_posts')
+                .insert({ post_id: post.id, user_id: currentUserId });
+            if (error) throw error;
+        }
+    } catch (error) {
+        console.error('Save error:', error);
+        setIsSaved(previousSaved);
+    }
+  };
+
+  const handleSendComment = async () => {
+    if (!commentText.trim() || !currentUserId) return;
+    
+    setSendingComment(true);
+    try {
+      const { data, error } = await supabase
+        .from('comments')
+        .insert({
+            post_id: post.id,
+            user_id: currentUserId,
+            content: commentText.trim()
+        })
+        .select('*, profiles(id, full_name, avatar_url, program)')
+        .single();
+
+      if (error) throw error;
+
+      // Update UI
+      setComments(prev => [...prev, data as Comment]);
+      setCommentText('');
+
+      // Send Notification
+      if (post.userId !== currentUserId) {
+        await supabase.from('notifications').insert({
+            user_id: post.userId,
+            actor_id: currentUserId,
+            type: 'comment',
+            title: 'New Comment',
+            content: `Commented: ${commentText.trim().substring(0, 50)}...`,
+            is_read: false
+        });
+      }
+
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to post comment.');
+    } finally {
+      setSendingComment(false);
+    }
   };
 
   const deletePost = async () => {
@@ -100,91 +257,42 @@ export default function PostDetailScreen() {
     setIsDeleting(true);
 
     try {
-      const { error, data } = await supabase
-        .from('posts')
-        .delete()
-        .eq('id', post.id)
-        .select();
-
-      if (error) {
-        if (error.code === '23503') {
-            throw new Error('Cannot delete post because it has related comments or likes.');
-        }
-        throw error;
-      }
-
-      if (!data || data.length === 0) {
-        throw new Error('Delete failed. You may not be the owner, or the post is already deleted.');
-      }
-
-      if (post.fileUrl) {
-        try {
-          const bucketName = 'post_attachments';
-          const urlParts = post.fileUrl.split(`${bucketName}/`);
-          if (urlParts.length > 1) {
-            await supabase.storage.from(bucketName).remove([urlParts[1]]);
-          }
-        } catch (storageError) {
-          console.warn('Post deleted, but file cleanup failed:', storageError);
-        }
-      }
+      const { error } = await supabase.from('posts').delete().eq('id', post.id);
+      if (error) throw error;
+      
+      // File cleanup (Optional: add logic here if needed)
 
       DeviceEventEmitter.emit('post_updated');
-      Alert.alert('Success', 'Post deleted successfully', [
-        { text: 'OK', onPress: () => navigation.goBack() }
-      ]);
+      navigation.goBack();
     } catch (error: any) {
-      console.error('Error deleting post:', error);
-      Alert.alert('Delete Failed', error.message || 'An unknown error occurred.');
+      Alert.alert('Delete Failed', error.message);
     } finally {
       setIsDeleting(false);
     }
   };
 
-  const startEditing = () => {
-    setEditTitle(post.title);
-    setEditDescription(post.description);
-    setIsEditing(true);
-  };
-
-  const cancelEditing = () => {
-    setIsEditing(false);
-    setEditTitle(post.title);
-    setEditDescription(post.description);
-  };
-
-  const savePost = async () => {
+  const savePostEdit = async () => {
     if (!editTitle.trim() || !editDescription.trim()) {
       Alert.alert('Validation Error', 'Title and description cannot be empty.');
       return;
     }
-
     setIsSaving(true);
     try {
       const { data, error } = await supabase
         .from('posts')
-        .update({
-          title: editTitle.trim(),
-          description: editDescription.trim()
-        })
+        .update({ title: editTitle.trim(), description: editDescription.trim() })
         .eq('id', post.id)
         .select()
         .single();
 
       if (error) throw error;
 
-      setPost(prev => ({ 
-        ...prev, 
-        title: data.title, 
-        description: data.description 
-      }));
-
+      setPost(prev => ({ ...prev, title: data.title, description: data.description }));
       setIsEditing(false);
       DeviceEventEmitter.emit('post_updated');
       Alert.alert('Success', 'Post updated successfully');
     } catch (error: any) {
-      console.error('Update failed:', error);
-      Alert.alert('Update Failed', error.message || 'Could not update post.');
+      Alert.alert('Update Failed', error.message);
     } finally {
       setIsSaving(false);
     }
@@ -192,26 +300,18 @@ export default function PostDetailScreen() {
 
   const handleMore = () => {
     if (isOwner) {
-      Alert.alert(
-        'Manage Post',
-        'Choose an action',
-        [
-          { text: 'Edit', onPress: startEditing },
-          { 
-            text: 'Delete', 
-            onPress: () => Alert.alert(
-              'Confirm Delete',
-              'Are you sure you want to delete this post?',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: deletePost }
-              ]
-            ),
-            style: 'destructive' 
-          },
-          { text: 'Cancel', style: 'cancel' }
-        ]
-      );
+      Alert.alert('Manage Post', 'Choose an action', [
+        { text: 'Edit', onPress: () => {
+            setEditTitle(post.title);
+            setEditDescription(post.description);
+            setIsEditing(true);
+        }},
+        { text: 'Delete', style: 'destructive', onPress: () => Alert.alert('Confirm', 'Are you sure?', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: deletePost }
+        ])},
+        { text: 'Cancel', style: 'cancel' }
+      ]);
     } else {
        Alert.alert('Options', 'Select an action', [
            { text: 'Report Post', onPress: () => console.log('Reported') },
@@ -220,18 +320,21 @@ export default function PostDetailScreen() {
     }
   };
 
-  const handleLike = () => {
-    if (isLiked) {
-      setLikes(likes - 1);
+  const handleViewAttachment = async () => {
+    if (!post.fileUrl) return;
+    if (isImage) {
+      setImageModalVisible(true);
     } else {
-      setLikes(likes + 1);
+      try {
+        await WebBrowser.openBrowserAsync(post.fileUrl);
+      } catch (err) {
+        Alert.alert('Error', 'Could not open the file.');
+      }
     }
-    setIsLiked(!isLiked);
   };
 
   const handleSendPrivateMessage = () => {
-    // Navigate directly to MessagesChat in the root stack
-    // @ts-ignore - The types will resolve at runtime, MessagesChat is in RootStack now
+    // @ts-ignore
     navigation.navigate('MessagesChat', {
         peerId: post.userId,
         peerName: post.authorName,
@@ -239,33 +342,170 @@ export default function PostDetailScreen() {
     });
   };
 
-  const handleSendComment = () => {
-    if (comment.trim()) {
-      console.log('Send comment:', comment);
-      setComment('');
-    }
-  };
+  // --- Render Components ---
 
-  // Determine if file is an image
-  const fileName = post.fileUrl ? getFileName(post.fileUrl) : '';
-  const isImage = /\.(jpg|jpeg|png|gif|webp|heic)$/i.test(fileName);
+  const renderHeader = () => (
+    <View style={styles.postCard}>
+        <View style={styles.authorSection}>
+        <View style={{ marginRight: 12 }}>
+            <Avatar initials={post.authorInitials} avatarUrl={post.authorAvatarUrl} size="default" />
+        </View>
 
-  // Handle viewing the file (In-App)
-  const handleViewAttachment = async () => {
-    if (!post.fileUrl) return;
+        <View style={styles.authorInfo}>
+            <Text style={styles.authorName}>{post.authorName}</Text>
+            <Text style={styles.timestamp}>{post.timestamp}</Text>
+        </View>
+        
+        <View style={styles.headerBadge}>
+            <Text style={styles.headerBadgeText}>Study</Text>
+        </View>
+        </View>
 
-    if (isImage) {
-      // Open in internal modal
-      setImageModalVisible(true);
-    } else {
-      // Open in in-app browser (WebBrowser)
-      try {
-        await WebBrowser.openBrowserAsync(post.fileUrl);
-      } catch (err) {
-        console.error('Error opening browser:', err);
-        Alert.alert('Error', 'Could not open the file.');
-      }
-    }
+        {isEditing ? (
+        <TextInput
+            style={styles.editTitleInput}
+            value={editTitle}
+            onChangeText={setEditTitle}
+            placeholder="Post Title"
+            placeholderTextColor={COLORS.textTertiary}
+        />
+        ) : (
+        <Text style={styles.postTitle}>{post.title}</Text>
+        )}
+
+        {isEditing ? (
+            <TextInput
+            style={styles.editDescInput}
+            value={editDescription}
+            onChangeText={setEditDescription}
+            placeholder="What's on your mind?"
+            placeholderTextColor={COLORS.textTertiary}
+            multiline
+        />
+        ) : (
+        <Text style={styles.postDescription}>{post.description}</Text>
+        )}
+
+        {isEditing && (
+        <View style={styles.editButtonsRow}>
+            <TouchableOpacity 
+                style={[styles.editButton, styles.cancelButton]} 
+                onPress={() => setIsEditing(false)}
+                disabled={isSaving}
+            >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+                style={[styles.editButton, styles.saveButton]} 
+                onPress={savePostEdit}
+                disabled={isSaving}
+            >
+                {isSaving ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.saveButtonText}>Save</Text>}
+            </TouchableOpacity>
+        </View>
+        )}
+
+        {post.fileUrl && !isEditing && (
+            <TouchableOpacity style={styles.attachment} onPress={handleViewAttachment} activeOpacity={0.7}>
+            <View style={styles.attachmentIcon}>
+                <Ionicons name={isImage ? "image" : "document-text"} size={24} color="#5C6BC0" />
+            </View>
+            <View style={styles.attachmentInfo}>
+                <Text style={styles.attachmentName} numberOfLines={1}>{fileName}</Text>
+                <Text style={styles.attachmentSize}>{isImage ? 'Tap to view image' : 'Tap to open file'}</Text>
+            </View>
+        </TouchableOpacity>
+        )}
+
+        {!isEditing && (
+        <>
+            {!isOwner && (
+                <TouchableOpacity style={styles.messageButton} onPress={handleSendPrivateMessage} activeOpacity={0.8}>
+                    <LinearGradient
+                        colors={GRADIENTS.primary}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.messageButtonGradient}
+                    >
+                        <Ionicons name="chatbubble-ellipses" size={20} color="#FFF" style={{marginRight: 8}} />
+                        <Text style={styles.messageButtonText}>Send Private Message</Text>
+                    </LinearGradient>
+                </TouchableOpacity>
+            )}
+
+            <View style={styles.statsRow}>
+                <TouchableOpacity style={styles.statItem} onPress={handleLike} activeOpacity={0.7}>
+                    <Ionicons 
+                        name={isLiked ? "heart" : "heart-outline"} 
+                        size={20} 
+                        color={isLiked ? COLORS.error : "#9EA3AE"} 
+                    />
+                    <Text style={styles.statNumber}>{likesCount}</Text>
+                </TouchableOpacity>
+
+                <View style={styles.statItem}>
+                    <Ionicons name="chatbubble-outline" size={20} color="#9EA3AE" />
+                    <Text style={styles.statNumber}>{comments.length}</Text>
+                </View>
+
+                {/* Share placeholder */}
+                <TouchableOpacity style={styles.statItem}>
+                    <Ionicons name="share-outline" size={20} color="#9EA3AE" />
+                </TouchableOpacity>
+
+                <View style={{ flex: 1 }} />
+
+                <TouchableOpacity style={styles.statItem} onPress={handleSave}>
+                    <Ionicons 
+                        name={isSaved ? "bookmark" : "bookmark-outline"} 
+                        size={20} 
+                        color={isSaved ? COLORS.primary : "#9EA3AE"} 
+                    />
+                </TouchableOpacity>
+            </View>
+        </>
+        )}
+
+        {!isEditing && (
+            <Text style={styles.repliesTitle}>
+                Comments ({comments.length})
+            </Text>
+        )}
+    </View>
+  );
+
+  const renderComment = ({ item }: { item: Comment }) => {
+    const initials = item.profiles?.full_name 
+        ? item.profiles.full_name.split(' ').map((n: string) => n[0]).join('').substring(0,2).toUpperCase()
+        : '??';
+
+    return (
+        <View style={styles.replyCard}>
+            <LinearGradient
+                colors={GRADIENTS.primary}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.replyAvatar}
+            >
+                <Text style={styles.replyAvatarText}>{initials}</Text>
+            </LinearGradient>
+
+            <View style={styles.replyContent}>
+                <View style={styles.replyHeader}>
+                    <Text style={styles.replyAuthorName}>{item.profiles?.full_name || 'Unknown'}</Text>
+                    {item.profiles?.program && (
+                        <View style={styles.replyLabelBadge}>
+                            <Text style={styles.replyLabelText}>{item.profiles.program}</Text>
+                        </View>
+                    )}
+                </View>
+                <Text style={styles.replyTimestamp}>
+                    {new Date(item.created_at).toLocaleDateString()} {new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                </Text>
+                <Text style={styles.replyText}>{item.content}</Text>
+            </View>
+        </View>
+    );
   };
 
   return (
@@ -293,207 +533,43 @@ export default function PostDetailScreen() {
         )}
       </View>
 
-      {/* Scrollable Content */}
-      <ScrollView
-        style={styles.content}
+      {/* Main Content List */}
+      <FlatList
+        data={isEditing ? [] : comments}
+        keyExtractor={(item) => item.id}
+        renderItem={renderComment}
+        ListHeaderComponent={renderHeader}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.postCard}>
-          <View style={styles.authorSection}>
-            <View style={{ marginRight: 12 }}>
-                <Avatar 
-                    initials={post.authorInitials} 
-                    avatarUrl={post.authorAvatarUrl}
-                    size="default" 
-                />
-            </View>
+        refreshControl={
+            <RefreshControl refreshing={loadingComments} onRefresh={() => {
+                fetchComments();
+                fetchLikesCount();
+            }} />
+        }
+        ListEmptyComponent={
+            !loadingComments && !isEditing ? (
+                <Text style={styles.emptyCommentsText}>No comments yet. Be the first!</Text>
+            ) : null
+        }
+      />
 
-            <View style={styles.authorInfo}>
-              <Text style={styles.authorName}>{post.authorName}</Text>
-              <Text style={styles.timestamp}>{post.timestamp}</Text>
-            </View>
-            
-            <View style={styles.headerBadge}>
-              <Text style={styles.headerBadgeText}>Study</Text>
-            </View>
-          </View>
-
-          {isEditing ? (
-            <TextInput
-                style={styles.editTitleInput}
-                value={editTitle}
-                onChangeText={setEditTitle}
-                placeholder="Post Title"
-                placeholderTextColor={COLORS.textTertiary}
-            />
-          ) : (
-            <Text style={styles.postTitle}>{post.title}</Text>
-          )}
-
-          {isEditing ? (
-             <TextInput
-                style={styles.editDescInput}
-                value={editDescription}
-                onChangeText={setEditDescription}
-                placeholder="What's on your mind?"
-                placeholderTextColor={COLORS.textTertiary}
-                multiline
-            />
-          ) : (
-            <Text style={styles.postDescription}>
-                {post.description}
-            </Text>
-          )}
-
-          {isEditing && (
-            <View style={styles.editButtonsRow}>
-                <TouchableOpacity 
-                    style={[styles.editButton, styles.cancelButton]} 
-                    onPress={cancelEditing}
-                    disabled={isSaving}
-                >
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                    style={[styles.editButton, styles.saveButton]} 
-                    onPress={savePost}
-                    disabled={isSaving}
-                >
-                    {isSaving ? (
-                        <ActivityIndicator color="#FFF" size="small" />
-                    ) : (
-                        <Text style={styles.saveButtonText}>Save</Text>
-                    )}
-                </TouchableOpacity>
-            </View>
-          )}
-
-          {post.fileUrl && !isEditing && (
-             <TouchableOpacity 
-                style={styles.attachment} 
-                onPress={handleViewAttachment}
-                activeOpacity={0.7}
-             >
-                <View style={styles.attachmentIcon}>
-                    <Ionicons 
-                        name={isImage ? "image" : "document-text"} 
-                        size={24} 
-                        color="#5C6BC0" 
-                    />
-                </View>
-                <View style={styles.attachmentInfo}>
-                    <Text style={styles.attachmentName} numberOfLines={1}>
-                        {fileName}
-                    </Text>
-                    <Text style={styles.attachmentSize}>
-                        {isImage ? 'Tap to view image' : 'Tap to open file'}
-                    </Text>
-                </View>
-            </TouchableOpacity>
-          )}
-
-          {!isEditing && (
-            <>
-                {(!isOwner) && (
-                    <TouchableOpacity
-                        style={styles.messageButton}
-                        onPress={handleSendPrivateMessage}
-                        activeOpacity={0.8}
-                    >
-                        <LinearGradient
-                            colors={GRADIENTS.primary}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={styles.messageButtonGradient}
-                        >
-                            <Ionicons name="chatbubble-ellipses" size={20} color="#FFF" style={{marginRight: 8}} />
-                            <Text style={styles.messageButtonText}>Send Private Message</Text>
-                        </LinearGradient>
-                    </TouchableOpacity>
-                )}
-
-                <View style={styles.statsRow}>
-                    <TouchableOpacity
-                        style={styles.statItem}
-                        onPress={handleLike}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons 
-                            name={isLiked ? "heart" : "heart-outline"} 
-                            size={20} 
-                            color={isLiked ? COLORS.error : "#9EA3AE"} 
-                        />
-                        <Text style={styles.statNumber}>24</Text>
-                    </TouchableOpacity>
-
-                    <View style={styles.statItem}>
-                        <Ionicons name="chatbubble-outline" size={20} color="#9EA3AE" />
-                        <Text style={styles.statNumber}>24</Text>
-                    </View>
-
-                    <TouchableOpacity style={styles.statItem}>
-                        <Ionicons name="share-outline" size={20} color="#9EA3AE" />
-                        <Text style={styles.statNumber}>24</Text>
-                    </TouchableOpacity>
-
-                    <View style={{ flex: 1 }} />
-
-                    <TouchableOpacity style={styles.statItem}>
-                        <Ionicons name="bookmark-outline" size={20} color="#9EA3AE" />
-                        <Text style={styles.statNumber}>24</Text>
-                    </TouchableOpacity>
-                </View>
-            </>
-          )}
-        </View>
-
-        {!isEditing && (
-            <View style={styles.repliesSection}>
-                <Text style={styles.repliesTitle}>Public Replies (2)</Text>
-
-                {MOCK_REPLIES.map((reply) => (
-                    <View key={reply.id} style={styles.replyCard}>
-                        <LinearGradient
-                            colors={GRADIENTS.primary}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.replyAvatar}
-                        >
-                            <Text style={styles.replyAvatarText}>{reply.authorInitials}</Text>
-                        </LinearGradient>
-
-                        <View style={styles.replyContent}>
-                            <View style={styles.replyHeader}>
-                                <Text style={styles.replyAuthorName}>{reply.authorName}</Text>
-                                <View style={styles.replyLabelBadge}>
-                                    <Text style={styles.replyLabelText}>{reply.label}</Text>
-                                </View>
-                            </View>
-                            <Text style={styles.replyTimestamp}>{reply.timestamp}</Text>
-                            <Text style={styles.replyText}>{reply.content}</Text>
-                        </View>
-                    </View>
-                ))}
-            </View>
-        )}
-      </ScrollView>
-
-      {/* Fixed Comment Section at Bottom */}
+      {/* Comment Input */}
       {!isEditing && (
           <View style={styles.commentSection}>
               <TextInput
                   style={styles.commentInput}
                   placeholder="Add a public comment..."
                   placeholderTextColor={COLORS.textTertiary}
-                  value={comment}
-                  onChangeText={setComment}
+                  value={commentText}
+                  onChangeText={setCommentText}
                   multiline={false}
               />
               <TouchableOpacity
                   style={styles.sendButton}
                   onPress={handleSendComment}
                   activeOpacity={0.7}
+                  disabled={sendingComment}
               >
                   <LinearGradient
                       colors={GRADIENTS.primary}
@@ -501,7 +577,11 @@ export default function PostDetailScreen() {
                       end={{ x: 1, y: 1 }}
                       style={styles.sendButtonGradient}
                   >
-                      <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
+                      {sendingComment ? (
+                          <ActivityIndicator size="small" color="#FFF" />
+                      ) : (
+                          <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
+                      )}
                   </LinearGradient>
               </TouchableOpacity>
           </View>
@@ -573,9 +653,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  content: {
-    flex: 1,
-  },
   contentContainer: {
     paddingBottom: 20,
   },
@@ -590,6 +667,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 3,
+    marginBottom: 16,
   },
   authorSection: {
     flexDirection: 'row',
@@ -758,17 +836,17 @@ const styles = StyleSheet.create({
     color: '#9EA3AE',
     marginLeft: 4,
   },
-  repliesSection: {
-    marginTop: 20,
-    marginHorizontal: 16,
-    marginBottom: 20,
-  },
   repliesTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: '#525769',
-    marginBottom: 16,
-    marginLeft: 4,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  emptyCommentsText: {
+    textAlign: 'center',
+    color: '#9EA3AE',
+    marginTop: 20,
   },
   replyCard: {
     flexDirection: 'row',
@@ -776,6 +854,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 16,
     marginBottom: 12,
+    marginHorizontal: 16,
   },
   replyAvatar: {
     width: 40,
@@ -857,7 +936,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Modal Styles
   modalContainer: {
     flex: 1,
     backgroundColor: '#000',

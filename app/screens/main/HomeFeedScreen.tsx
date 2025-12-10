@@ -26,7 +26,6 @@ import { CATEGORIES, CategoryType } from '../../constants/categories';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
-// FIX: Define composite type for navigation (Tab + Stack)
 type HomeFeedScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Home'>,
   NativeStackNavigationProp<RootStackParamList>
@@ -64,6 +63,8 @@ export const HomeFeedScreen: React.FC = () => {
 
   const fetchPosts = async () => {
     try {
+      // FIX: Explicitly specify the foreign key constraint for profiles
+      // 'profiles!posts_user_id_fkey' targets the author relationship
       let query = supabase
         .from('posts')
         .select(`
@@ -74,7 +75,7 @@ export const HomeFeedScreen: React.FC = () => {
           category, 
           user_id, 
           file_url, 
-          profiles (full_name, avatar_url)
+          profiles:profiles!posts_user_id_fkey (full_name, avatar_url)
         `)
         .order('created_at', { ascending: false });
 
@@ -97,6 +98,7 @@ export const HomeFeedScreen: React.FC = () => {
         const formattedPosts: Post[] = data.map((item: any) => ({
           id: item.id,
           userId: item.user_id,
+          // We aliased it as 'profiles' in the query, so we access it as item.profiles
           authorName: item.profiles?.full_name || 'Unknown User',
           authorInitials: getInitials(item.profiles?.full_name),
           authorAvatarUrl: item.profiles?.avatar_url,
