@@ -36,6 +36,9 @@
         "projectId": "b2fb2171-1e77-48a9-b26b-eed591b5dc9e"
       }
     },
-    "owner": "campusee2025"
+    "owner": "campusee2025",
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }

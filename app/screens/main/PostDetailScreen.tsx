@@ -11,11 +11,15 @@ import {
   DeviceEventEmitter,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Modal, // Added Modal
+  Image, // Added Image for the modal
+  SafeAreaView // Added for safe rendering in modal
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as WebBrowser from 'expo-web-browser'; // Added WebBrowser
 import type { RootStackParamList } from '../../navigation/types';
 import { GRADIENTS, COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
@@ -71,6 +75,21 @@ export default function PostDetailScreen() {
   const [likes, setLikes] = useState(1039); 
   const [isLiked, setIsLiked] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Image Viewer State
+  const [imageModalVisible, setImageModalVisible] = useState(false);
+
+  // Helper to extract filename from URL
+  const getFileName = (url: string) => {
+    try {
+        const decoded = decodeURIComponent(url);
+        // Remove any query params
+        const cleanUrl = decoded.split('?')[0]; 
+        return cleanUrl.split('/').pop() || 'attachment';
+    } catch (e) {
+        return 'attachment';
+    }
+  };
 
   const handleBack = () => {
     navigation.goBack();
@@ -227,6 +246,28 @@ export default function PostDetailScreen() {
     }
   };
 
+  // Determine if file is an image
+  const fileName = post.fileUrl ? getFileName(post.fileUrl) : '';
+  const isImage = /\.(jpg|jpeg|png|gif|webp|heic)$/i.test(fileName);
+
+  // Handle viewing the file (In-App)
+  const handleViewAttachment = async () => {
+    if (!post.fileUrl) return;
+
+    if (isImage) {
+      // Open in internal modal
+      setImageModalVisible(true);
+    } else {
+      // Open in in-app browser (WebBrowser)
+      try {
+        await WebBrowser.openBrowserAsync(post.fileUrl);
+      } catch (err) {
+        console.error('Error opening browser:', err);
+        Alert.alert('Error', 'Could not open the file.');
+      }
+    }
+  };
+
   return (
     <KeyboardAvoidingView 
       style={styles.container}
@@ -329,20 +370,31 @@ export default function PostDetailScreen() {
           )}
 
           {post.fileUrl && !isEditing && (
-             <View style={styles.attachment}>
+             <TouchableOpacity 
+                style={styles.attachment} 
+                onPress={handleViewAttachment}
+                activeOpacity={0.7}
+             >
                 <View style={styles.attachmentIcon}>
-                    <Ionicons name="document-text" size={24} color="#5C6BC0" />
+                    <Ionicons 
+                        name={isImage ? "image" : "document-text"} 
+                        size={24} 
+                        color="#5C6BC0" 
+                    />
                 </View>
                 <View style={styles.attachmentInfo}>
-                    <Text style={styles.attachmentName}>Hello.doc</Text>
-                    <Text style={styles.attachmentSize}>128.67 kb</Text>
+                    <Text style={styles.attachmentName} numberOfLines={1}>
+                        {fileName}
+                    </Text>
+                    <Text style={styles.attachmentSize}>
+                        {isImage ? 'Tap to view image' : 'Tap to open file'}
+                    </Text>
                 </View>
-            </View>
+            </TouchableOpacity>
           )}
 
           {!isEditing && (
             <>
-                
                 {(!isOwner) && (
                     <TouchableOpacity
                         style={styles.messageButton}
@@ -454,6 +506,32 @@ export default function PostDetailScreen() {
               </TouchableOpacity>
           </View>
       )}
+
+      {/* Image Preview Modal */}
+      <Modal
+        visible={imageModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setImageModalVisible(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+            <TouchableOpacity 
+                style={styles.closeModalButton} 
+                onPress={() => setImageModalVisible(false)}
+            >
+                <Ionicons name="close-circle" size={40} color="#FFF" />
+            </TouchableOpacity>
+            
+            {post.fileUrl && (
+                <Image 
+                    source={{ uri: post.fileUrl }} 
+                    style={styles.fullScreenImage} 
+                    resizeMode="contain"
+                />
+            )}
+        </SafeAreaView>
+      </Modal>
+
     </KeyboardAvoidingView>
   );
 }
@@ -778,5 +856,23 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeModalButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 10,
+  },
+  fullScreenImage: {
+    width: '100%',
+    height: '80%',
   },
 });

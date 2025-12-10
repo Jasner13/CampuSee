@@ -14,6 +14,9 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import * as DocumentPicker from 'expo-document-picker';
+// CHANGED: Import from 'legacy' to fix SDK 54 deprecation error
+import * as FileSystem from 'expo-file-system/legacy'; 
+import { decode } from 'base64-arraybuffer';
 import type { MainTabParamList } from '../../navigation/types';
 import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
@@ -77,14 +80,21 @@ export default function CreatePostScreen() {
       const fileName = `${userId}/${Date.now()}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      // Create a blob from the URI
-      const response = await fetch(selectedFile.uri);
-      const blob = await response.blob();
+      // Read file as Base64 using the legacy FileSystem API
+      // We use the string literal 'base64' to avoid TypeScript errors with the enum
+      const base64 = await FileSystem.readAsStringAsync(selectedFile.uri, {
+        encoding: 'base64',
+      });
 
+      // Decode Base64 to ArrayBuffer
+      const arrayBuffer = decode(base64);
+
+      // Upload ArrayBuffer to Supabase
       const { error: uploadError } = await supabase.storage
         .from('post_attachments')
-        .upload(filePath, blob, {
-          contentType: selectedFile.mimeType ?? undefined,
+        .upload(filePath, arrayBuffer, {
+          contentType: selectedFile.mimeType ?? 'application/octet-stream',
+          upsert: false,
         });
 
       if (uploadError) throw uploadError;
