@@ -1,3 +1,4 @@
+// app/navigation/AppNavigator.tsx
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './types';
@@ -17,6 +18,7 @@ export const AppNavigator: React.FC = () => {
 
   return (
     <Stack.Navigator
+      id={undefined}
       screenOptions={{
         headerShown: false,
         animation: 'fade',
@@ -27,8 +29,9 @@ export const AppNavigator: React.FC = () => {
       ) : (
         <>
           <Stack.Screen name="Main" component={MainNavigator} />
-          <Stack.Screen 
-            name="PostDetail" 
+          {/* Renamed to PostDetails to match types and consistent usage */}
+          <Stack.Screen
+            name="PostDetails"
             component={PostDetailScreen}
             options={{
               animation: 'slide_from_right',
@@ -41,6 +44,9 @@ export const AppNavigator: React.FC = () => {
             }}
           >
             <Stack.Screen name="Settings" component={SettingsScreen} />
+            {/* Added EditProfile and ChangePassword here if they are meant to be modals in RootStack */}
+            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+            <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
           </Stack.Group>
         </>
       )}

@@ -1,4 +1,4 @@
-// navigation/types.ts
+// app/navigation/types.ts
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import { Post } from '../components/cards/PostCard';
 
@@ -29,7 +29,12 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
   Main: NavigatorScreenParams<MainTabParamList>;
-  PostDetail: { postId: string };
+  // Unified to 'PostDetails' to match MainTabParamList and HomeFeedScreen usage
+  PostDetails: { post: Post };
+  // Added missing routes used in AppNavigator
+  Settings: undefined;
+  EditProfile: undefined;
+  ChangePassword: undefined;
 };
 
 declare global {

@@ -1,3 +1,4 @@
+// app/screens/main/PostDetailScreen.tsx
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,8 +7,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/types';
 import { GRADIENTS, COLORS } from '../../constants/colors';
 
-type PostDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'PostDetail'>;
-type PostDetailScreenRouteProp = RouteProp<RootStackParamList, 'PostDetail'>;
+// Updated to 'PostDetails'
+type PostDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'PostDetails'>;
+type PostDetailScreenRouteProp = RouteProp<RootStackParamList, 'PostDetails'>;
 
 interface Reply {
   id: string;
@@ -32,6 +34,10 @@ const MOCK_REPLIES: Reply[] = [
 export default function PostDetailScreen() {
   const navigation = useNavigation<PostDetailScreenNavigationProp>();
   const route = useRoute<PostDetailScreenRouteProp>();
+
+  // Use the 'post' object passed via navigation
+  const { post } = route.params;
+
   const [comment, setComment] = useState('');
   const [likes, setLikes] = useState(24);
   const [isLiked, setIsLiked] = useState(false);
@@ -73,16 +79,16 @@ export default function PostDetailScreen() {
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
-        
+
         <Text style={styles.headerTitle}>Post</Text>
-        
+
         <TouchableOpacity style={styles.moreButton} activeOpacity={0.7} onPress={handleMore}>
           <Text style={styles.moreIcon}>⋯</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
@@ -90,31 +96,32 @@ export default function PostDetailScreen() {
         <View style={styles.postCard}>
           {/* Author Info */}
           <View style={styles.authorSection}>
-            <LinearGradient 
-              colors={GRADIENTS.primary} 
-              start={{ x: 0, y: 0 }} 
-              end={{ x: 1, y: 1 }} 
+            <LinearGradient
+              colors={GRADIENTS.primary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
               style={styles.avatar}
             >
-              <Text style={styles.avatarText}>XX</Text>
+              <Text style={styles.avatarText}>{post.authorInitials}</Text>
             </LinearGradient>
-            
+
             <View style={styles.authorInfo}>
-              <Text style={styles.authorName}>First Last</Text>
-              <Text style={styles.timestamp}>Just now</Text>
+              <Text style={styles.authorName}>{post.authorName}</Text>
+              <Text style={styles.timestamp}>{post.timestamp}</Text>
             </View>
 
             <View style={styles.labelBadge}>
-              <Text style={styles.labelText}>Study</Text>
+              <Text style={styles.labelText}>{post.label}</Text>
             </View>
           </View>
 
           {/* Post Content */}
-          <Text style={styles.postTitle}>Lorem Ipsum Dolor Sit Amet</Text>
+          <Text style={styles.postTitle}>{post.title}</Text>
           <Text style={styles.postDescription}>
-            Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+            {post.description}
           </Text>
 
+          {/* ... Rest of the file remains the same ... */}
           {/* Attachment */}
           <View style={styles.attachment}>
             <View style={styles.attachmentIcon}>
@@ -127,15 +134,15 @@ export default function PostDetailScreen() {
           </View>
 
           {/* Send Message Button */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.messageButton}
             onPress={handleSendPrivateMessage}
             activeOpacity={0.8}
           >
-            <LinearGradient 
-              colors={GRADIENTS.primary} 
-              start={{ x: 0, y: 0 }} 
-              end={{ x: 1, y: 1 }} 
+            <LinearGradient
+              colors={GRADIENTS.primary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
               style={styles.messageButtonGradient}
             >
               <Text style={styles.messageButtonIcon}>💬</Text>
@@ -145,7 +152,7 @@ export default function PostDetailScreen() {
 
           {/* Interaction Stats */}
           <View style={styles.statsRow}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.statItem}
               onPress={handleLike}
               activeOpacity={0.7}
@@ -177,15 +184,15 @@ export default function PostDetailScreen() {
 
           {MOCK_REPLIES.map((reply) => (
             <View key={reply.id} style={styles.replyCard}>
-              <LinearGradient 
-                colors={GRADIENTS.primary} 
-                start={{ x: 0, y: 0 }} 
-                end={{ x: 1, y: 1 }} 
+              <LinearGradient
+                colors={GRADIENTS.primary}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
                 style={styles.replyAvatar}
               >
                 <Text style={styles.replyAvatarText}>{reply.authorInitials}</Text>
               </LinearGradient>
-              
+
               <View style={styles.replyContent}>
                 <View style={styles.replyHeader}>
                   <Text style={styles.replyAuthorName}>{reply.authorName}</Text>
@@ -210,15 +217,15 @@ export default function PostDetailScreen() {
             onChangeText={setComment}
             multiline
           />
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.sendButton}
             onPress={handleSendComment}
             activeOpacity={0.7}
           >
-            <LinearGradient 
-              colors={GRADIENTS.primary} 
-              start={{ x: 0, y: 0 }} 
-              end={{ x: 1, y: 1 }} 
+            <LinearGradient
+              colors={GRADIENTS.primary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
               style={styles.sendButtonGradient}
             >
               <Text style={styles.sendButtonIcon}>➤</Text>

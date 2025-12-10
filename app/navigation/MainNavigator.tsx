@@ -1,3 +1,4 @@
+// app/navigation/MainNavigator.tsx
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { MainTabParamList } from './types';
@@ -17,6 +18,7 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 export const MainNavigator: React.FC = () => {
   return (
     <Tab.Navigator
+      id={undefined}
       screenOptions={{
         headerShown: false,
       }}
