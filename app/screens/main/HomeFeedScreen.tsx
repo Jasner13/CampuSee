@@ -1,8 +1,16 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  ScrollView, 
+  StyleSheet, 
+  StatusBar, 
+  TouchableOpacity, 
+  RefreshControl,
+  ActivityIndicator 
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { MainTabParamList } from '../../navigation/types';
 import { SearchBar } from '../../components/SearchBar';
@@ -12,43 +20,144 @@ import { BottomNav } from '../../components/BottomNav';
 import { GRADIENTS, COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { CATEGORIES, CategoryType } from '../../constants/categories';
+import { supabase } from '../../lib/supabase';
 
 type HomeFeedScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Home'>;
 
-const MOCK_POSTS: Post[] = [
-  {
-    id: '1',
-    authorName: 'First Last',
-    authorInitials: 'XX',
-    timestamp: 'Just now',
-    label: 'Label',
-    title: 'Lorem Ipsum Dolor Sit Amet',
-    description: 'Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
-  },
-  {
-    id: '2',
-    authorName: 'First Last',
-    authorInitials: 'XX',
-    timestamp: 'Just now',
-    label: 'Label',
-    title: 'Lorem Ipsum Dolor Sit Amet',
-    description: 'Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
-  },
-  {
-    id: '3',
-    authorName: 'First Last',
-    authorInitials: 'XX',
-    timestamp: 'Just now',
-    label: 'Label',
-    title: 'Lorem Ipsum Dolor Sit Amet',
-    description: 'Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
-  },
-];
+// Helper to calculate "2 hours ago", "Just now", etc.
+const getRelativeTime = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (seconds < 60) return 'Just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  
+  return date.toLocaleDateString();
+};
+
+// Helper to get initials from a name
+const getInitials = (name: string | null) => {
+  if (!name) return '??';
+  return name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+};
 
 export const HomeFeedScreen: React.FC = () => {
   const navigation = useNavigation<HomeFeedScreenNavigationProp>();
   const [searchText, setSearchText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('all');
+  
+  // State for Real Data
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [currentUserInitials, setCurrentUserInitials] = useState('..');
+
+  const fetchPosts = async () => {
+    try {
+      let query = supabase
+        .from('posts')
+        .select(`
+          id,
+          created_at,
+          title,
+          description,
+          category,
+          user_id,
+          profiles (full_name)
+        `)
+        .order('created_at', { ascending: false });
+
+      // Apply Filters
+      if (selectedCategory !== 'all') {
+        query = query.eq('category', selectedCategory);
+      }
+      
+      if (searchText.trim()) {
+        query = query.ilike('title', `%${searchText}%`);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching posts:', error);
+        return;
+      }
+
+      if (data) {
+        const formattedPosts: Post[] = data.map((item: any) => ({
+          id: item.id,
+          authorName: item.profiles?.full_name || 'Unknown User',
+          authorInitials: getInitials(item.profiles?.full_name),
+          timestamp: getRelativeTime(item.created_at),
+          label: item.category.charAt(0).toUpperCase() + item.category.slice(1), // Capitalize
+          title: item.title,
+          description: item.description,
+        }));
+        setPosts(formattedPosts);
+      }
+    } catch (err) {
+      console.error('Unexpected error:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const fetchUserProfile = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+      
+      if (data?.full_name) {
+        setCurrentUserInitials(getInitials(data.full_name));
+      }
+    }
+  };
+
+  // Initial Fetch
+  useEffect(() => {
+    fetchUserProfile();
+    fetchPosts();
+  }, []);
+
+  // Re-fetch when filters change
+  useEffect(() => {
+    // Debounce search slightly to avoid too many requests while typing
+    const timeoutId = setTimeout(() => {
+      setLoading(true);
+      fetchPosts();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [selectedCategory, searchText]);
+
+  // Re-fetch when coming back to this screen (e.g. after creating a post)
+  useFocusEffect(
+    useCallback(() => {
+      fetchPosts();
+    }, [])
+  );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchPosts();
+    fetchUserProfile(); // Ensure profile is up to date too
+  }, []);
 
   const handleNavigate = (item: 'home' | 'messages' | 'notifications' | 'profile') => {
     const routeMap = {
@@ -66,7 +175,7 @@ export const HomeFeedScreen: React.FC = () => {
   };
 
   const handlePostPress = (post: Post) => {
-  navigation.navigate('PostDetails', { post });
+    navigation.navigate('PostDetails', { post });
   };
 
   return (
@@ -79,9 +188,13 @@ export const HomeFeedScreen: React.FC = () => {
             <Text style={styles.logoWhite}>Campu</Text>
             <Text style={styles.logoGradient}>See</Text>
           </Text>
-          <TouchableOpacity style={styles.profileAvatar} activeOpacity={0.8}>
+          <TouchableOpacity 
+            style={styles.profileAvatar} 
+            activeOpacity={0.8}
+            onPress={() => handleNavigate('profile')}
+          >
             <LinearGradient colors={GRADIENTS.accent} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.profileAvatarGradient}>
-              <Text style={styles.profileInitials}>JD</Text>
+              <Text style={styles.profileInitials}>{currentUserInitials}</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -107,10 +220,26 @@ export const HomeFeedScreen: React.FC = () => {
         <View style={styles.categoryDividerBottom} />
       </View>
 
-      <ScrollView style={styles.feedContainer} contentContainerStyle={styles.feedContent} showsVerticalScrollIndicator={false}>
-        {MOCK_POSTS.map((post) => (
-          <PostCard key={post.id} post={post} onPress={() => handlePostPress(post)} />
-        ))}
+      <ScrollView 
+        style={styles.feedContainer} 
+        contentContainerStyle={styles.feedContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
+        }
+      >
+        {loading && !refreshing ? (
+          <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 20 }} />
+        ) : posts.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>No posts found.</Text>
+            <Text style={styles.emptyStateSubText}>Be the first to post!</Text>
+          </View>
+        ) : (
+          posts.map((post) => (
+            <PostCard key={post.id} post={post} onPress={() => handlePostPress(post)} />
+          ))
+        )}
       </ScrollView>
 
       <BottomNav selected="home" onNavigate={handleNavigate} onCreatePost={handleCreatePost} />
@@ -197,4 +326,19 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingBottom: 100,
   },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 50,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  emptyStateSubText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 8,
+  }
 });

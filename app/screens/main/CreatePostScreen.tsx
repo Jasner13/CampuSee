@@ -1,10 +1,22 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, ScrollView, StyleSheet, StatusBar, TouchableOpacity } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  ScrollView, 
+  StyleSheet, 
+  StatusBar, 
+  TouchableOpacity, 
+  Alert,
+  ActivityIndicator,
+  Image 
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import * as DocumentPicker from 'expo-document-picker';
 import type { MainTabParamList } from '../../navigation/types';
 import { COLORS } from '../../constants/colors';
-import { FONTS } from '../../constants/fonts';
+import { supabase } from '../../lib/supabase';
 
 type CreatePostScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'CreatePost'>;
 
@@ -29,18 +41,119 @@ export default function CreatePostScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryOption | null>(null);
+  
+  // State for file handling
+  const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const handleCancel = () => {
     navigation.navigate('Home');
   };
 
-  const handlePost = () => {
-    console.log('Creating post:', { title, description, selectedCategory });
-    navigation.navigate('Home');
+  const handleBrowseFiles = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*', // Allow all file types
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelectedFile(result.assets[0]);
+      }
+    } catch (err) {
+      console.warn('Error picking file:', err);
+    }
   };
 
-  const handleBrowseFiles = () => {
-    console.log('Browse files pressed');
+  const removeFile = () => {
+    setSelectedFile(null);
+  };
+
+  const uploadFile = async (userId: string): Promise<string | null> => {
+    if (!selectedFile) return null;
+
+    try {
+      const fileExt = selectedFile.name.split('.').pop();
+      const fileName = `${userId}/${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      // Create a blob from the URI
+      const response = await fetch(selectedFile.uri);
+      const blob = await response.blob();
+
+      const { error: uploadError } = await supabase.storage
+        .from('post_attachments')
+        .upload(filePath, blob, {
+          contentType: selectedFile.mimeType ?? undefined,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data } = supabase.storage
+        .from('post_attachments')
+        .getPublicUrl(filePath);
+
+      return data.publicUrl;
+
+    } catch (error) {
+      console.error('File upload failed:', error);
+      throw error;
+    }
+  };
+
+  const handlePost = async () => {
+    // 1. Validation
+    if (!title.trim() || !description.trim()) {
+      Alert.alert('Missing Fields', 'Please enter a title and description.');
+      return;
+    }
+    if (!selectedCategory) {
+      Alert.alert('Category Required', 'Please select a category for your post.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // 2. Get User
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        Alert.alert('Error', 'You must be logged in to post.');
+        return;
+      }
+
+      // 3. Upload File (if exists)
+      let fileUrl = null;
+      if (selectedFile) {
+        fileUrl = await uploadFile(user.id);
+      }
+
+      // 4. Insert Post into Database
+      const { error: insertError } = await supabase
+        .from('posts')
+        .insert({
+          user_id: user.id,
+          title: title.trim(),
+          description: description.trim(),
+          category: selectedCategory,
+          file_url: fileUrl,
+          // You might want to store file_type if needed for rendering logic later
+          // file_type: selectedFile?.mimeType 
+        });
+
+      if (insertError) throw insertError;
+
+      // 5. Success
+      Alert.alert('Success', 'Post created successfully!', [
+        { text: 'OK', onPress: () => navigation.navigate('Home') }
+      ]);
+
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Something went wrong while creating the post.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -58,10 +171,15 @@ export default function CreatePostScreen() {
         
         <TouchableOpacity 
           onPress={handlePost} 
-          style={styles.postButton}
+          style={[styles.postButton, loading && styles.postButtonDisabled]}
           activeOpacity={0.8}
+          disabled={loading}
         >
-          <Text style={styles.postButtonText}>Post</Text>
+          {loading ? (
+             <ActivityIndicator color={COLORS.textLight} size="small" />
+          ) : (
+             <Text style={styles.postButtonText}>Post</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -79,6 +197,7 @@ export default function CreatePostScreen() {
             placeholderTextColor={COLORS.lightGray}
             value={title}
             onChangeText={setTitle}
+            editable={!loading}
           />
         </View>
 
@@ -94,6 +213,7 @@ export default function CreatePostScreen() {
             multiline
             numberOfLines={4}
             textAlignVertical="top"
+            editable={!loading}
           />
         </View>
 
@@ -113,6 +233,7 @@ export default function CreatePostScreen() {
                   ]}
                   onPress={() => setSelectedCategory(category.type)}
                   activeOpacity={0.7}
+                  disabled={loading}
                 >
                   <Text style={styles.categoryIcon}>{category.icon}</Text>
                   <Text 
@@ -132,20 +253,39 @@ export default function CreatePostScreen() {
         {/* Attachment Section */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Attachment</Text>
-          <TouchableOpacity 
-            style={styles.attachmentBox}
-            onPress={handleBrowseFiles}
-            activeOpacity={0.7}
-          >
-            <View style={styles.attachmentIconContainer}>
-              <Text style={styles.attachmentIcon}>📎</Text>
+          
+          {!selectedFile ? (
+            <TouchableOpacity 
+              style={styles.attachmentBox}
+              onPress={handleBrowseFiles}
+              activeOpacity={0.7}
+              disabled={loading}
+            >
+              <View style={styles.attachmentIconContainer}>
+                <Text style={styles.attachmentIcon}>📎</Text>
+              </View>
+              <Text style={styles.attachmentTitle}>Add Photo or File</Text>
+              <Text style={styles.attachmentSubtitle}>Tap to browse or drag and drop</Text>
+              <View style={styles.browseButton}>
+                <Text style={styles.browseButtonText}>Browse Files</Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.selectedFileContainer}>
+              <View style={styles.fileInfo}>
+                <Text style={styles.fileIcon}>📄</Text>
+                <View style={styles.fileDetails}>
+                   <Text style={styles.fileName} numberOfLines={1}>{selectedFile.name}</Text>
+                   <Text style={styles.fileSize}>
+                     {(selectedFile.size ? selectedFile.size / 1024 / 1024 : 0).toFixed(2)} MB
+                   </Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={removeFile} style={styles.removeFileButton}>
+                <Text style={styles.removeFileText}>✕</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.attachmentTitle}>Add Photo or File</Text>
-            <Text style={styles.attachmentSubtitle}>Tap to browse or drag and drop</Text>
-            <View style={styles.browseButton}>
-              <Text style={styles.browseButtonText}>Browse Files</Text>
-            </View>
-          </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -193,6 +333,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 8,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  postButtonDisabled: {
+    opacity: 0.6,
   },
   postButtonText: {
     color: COLORS.textLight,
@@ -302,5 +447,47 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     fontSize: 15,
     fontWeight: '700',
+  },
+  // New Styles for Selected File
+  selectedFileContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.backgroundLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    padding: 12,
+  },
+  fileInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  fileIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  fileDetails: {
+    flex: 1,
+  },
+  fileName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: 2,
+  },
+  fileSize: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  removeFileButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  removeFileText: {
+    fontSize: 18,
+    color: COLORS.textSecondary,
+    fontWeight: '600',
   },
 });
