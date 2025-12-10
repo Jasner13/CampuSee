@@ -8,7 +8,8 @@ import {
   TouchableOpacity, 
   RefreshControl, 
   ActivityIndicator, 
-  DeviceEventEmitter 
+  DeviceEventEmitter,
+  Image 
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -22,6 +23,7 @@ import { GRADIENTS, COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { CATEGORIES, CategoryType } from '../../constants/categories';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 type HomeFeedScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Home'>;
 
@@ -46,19 +48,30 @@ const getInitials = (name: string | null) => {
 
 export const HomeFeedScreen: React.FC = () => {
   const navigation = useNavigation<HomeFeedScreenNavigationProp>();
+  const { profile, refreshProfile } = useAuth(); // Use Auth Context
+
   const [searchText, setSearchText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('all');
   
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [currentUserInitials, setCurrentUserInitials] = useState('..');
 
   const fetchPosts = async () => {
     try {
+      // Fetches avatar_url alongside full_name
       let query = supabase
         .from('posts')
-        .select(`id, created_at, title, description, category, user_id, file_url, profiles (full_name)`)
+        .select(`
+          id, 
+          created_at, 
+          title, 
+          description, 
+          category, 
+          user_id, 
+          file_url, 
+          profiles (full_name, avatar_url)
+        `)
         .order('created_at', { ascending: false });
 
       if (selectedCategory !== 'all') {
@@ -82,6 +95,7 @@ export const HomeFeedScreen: React.FC = () => {
           userId: item.user_id,
           authorName: item.profiles?.full_name || 'Unknown User',
           authorInitials: getInitials(item.profiles?.full_name),
+          authorAvatarUrl: item.profiles?.avatar_url, // Map the avatar URL
           timestamp: getRelativeTime(item.created_at),
           label: item.category.charAt(0).toUpperCase() + item.category.slice(1),
           title: item.title,
@@ -99,20 +113,11 @@ export const HomeFeedScreen: React.FC = () => {
     }
   };
 
-  const fetchUserProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase.from('profiles').select('full_name').eq('id', user.id).single();
-      if (data?.full_name) setCurrentUserInitials(getInitials(data.full_name));
-    }
-  };
-
   // Initial Fetch & Listener setup
   useEffect(() => {
-    fetchUserProfile();
     fetchPosts();
 
-    // Listen for updates from other screens (like Deleting a post)
+    // Listen for updates from other screens
     const subscription = DeviceEventEmitter.addListener('post_updated', () => {
         setLoading(true);
         fetchPosts();
@@ -121,7 +126,7 @@ export const HomeFeedScreen: React.FC = () => {
     return () => {
         subscription.remove();
     };
-  }, []); // Run once on mount
+  }, []); 
 
   // Re-fetch when filters change
   useEffect(() => {
@@ -132,17 +137,18 @@ export const HomeFeedScreen: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [selectedCategory, searchText]);
 
-  // Also fetch when screen gains focus (fallback)
+  // Also fetch when screen gains focus
   useFocusEffect(
     useCallback(() => {
       fetchPosts();
-    }, [selectedCategory, searchText]) // Add dependencies to ensure correct state usage
+      refreshProfile(); // Ensure profile data in context is fresh
+    }, [selectedCategory, searchText]) 
   );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchPosts();
-    fetchUserProfile();
+    refreshProfile();
   }, []);
 
   const handleNavigate = (item: 'home' | 'messages' | 'notifications' | 'profile') => {
@@ -178,14 +184,23 @@ export const HomeFeedScreen: React.FC = () => {
             activeOpacity={0.8} 
             onPress={() => handleNavigate('profile')}
           >
-            <LinearGradient 
-              colors={GRADIENTS.accent} 
-              start={{ x: 0, y: 0 }} 
-              end={{ x: 0, y: 1 }} 
-              style={styles.profileAvatarGradient}
-            >
-              <Text style={styles.profileInitials}>{currentUserInitials}</Text>
-            </LinearGradient>
+            {profile?.avatar_url ? (
+              <Image 
+                source={{ uri: profile.avatar_url }} 
+                style={styles.profileAvatarImage} 
+              />
+            ) : (
+              <LinearGradient 
+                colors={GRADIENTS.accent} 
+                start={{ x: 0, y: 0 }} 
+                end={{ x: 0, y: 1 }} 
+                style={styles.profileAvatarGradient}
+              >
+                <Text style={styles.profileInitials}>
+                  {profile?.full_name ? getInitials(profile.full_name) : '??'}
+                </Text>
+              </LinearGradient>
+            )}
           </TouchableOpacity>
         </View>
       </LinearGradient>
@@ -280,6 +295,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 8,
+  },
+  profileAvatarImage: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    resizeMode: 'cover',
   },
   profileAvatarGradient: {
     width: 46,

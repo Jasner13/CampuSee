@@ -7,24 +7,10 @@ import { FONTS } from '../../constants/fonts';
 
 export interface Post {
   id: string;
-  authorName: string;
-  authorInitials: string;
-  timestamp: string;
-  label: string;
-  title: string;
-  description: string;
-}
-
-interface PostCardProps {
-  post: Post;
-  onPress?: () => void;
-}
-
-export interface Post {
-  id: string;
   userId: string; 
   authorName: string;
   authorInitials: string;
+  authorAvatarUrl?: string | null; // Added this field
   timestamp: string;
   label: string;
   title: string;
@@ -33,11 +19,21 @@ export interface Post {
   fileUrl?: string | null; 
 }
 
+interface PostCardProps {
+  post: Post;
+  onPress?: () => void;
+}
+
 export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={styles.container}>
       <View style={styles.top}>
-        <Avatar initials={post.authorInitials} size="default" />
+        {/* Pass the avatarUrl here */}
+        <Avatar 
+          initials={post.authorInitials} 
+          avatarUrl={post.authorAvatarUrl} 
+          size="default" 
+        />
         <View style={styles.nameMetadata}>
           <Text style={styles.authorName}>{post.authorName}</Text>
           <Text style={styles.timestamp}>{post.timestamp}</Text>
