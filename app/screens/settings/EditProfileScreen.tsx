@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, ScrollView, StyleSheet, StatusBar, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Profile } from '../../types';
+import { RootStackParamList } from '../../navigation/types';
+
+type EditProfileRouteProp = RouteProp<RootStackParamList, 'EditProfile'>;
 
 export default function EditProfileScreen() {
   const navigation = useNavigation();
-  const { session } = useAuth();
+  const route = useRoute<EditProfileRouteProp>();
+  const { session, refreshProfile } = useAuth();
+
+  // Check if we are in "Setup Mode" (New User)
+  const isNewUser = route.params?.isNewUser || false;
 
   // State for form fields
   const [name, setName] = useState('');
@@ -46,7 +52,8 @@ export default function EditProfileScreen() {
         .eq('id', session.user.id)
         .single();
 
-      if (error) throw error;
+      // If new user, data might be null/error, which is fine (fields stay empty)
+      if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
         setName(data.full_name || '');
@@ -63,11 +70,11 @@ export default function EditProfileScreen() {
   };
 
   const handleBack = () => {
+    if (isNewUser) return; // Disable back for new users
     navigation.goBack();
   };
 
   const handleChangePhoto = () => {
-    // Logic for photo upload will be added in a future commit (requires storage bucket)
     Alert.alert('Coming Soon', 'Photo upload will be implemented in the next sprint.');
   };
 
@@ -86,7 +93,7 @@ export default function EditProfileScreen() {
       setIsSaving(true);
       if (!session?.user) throw new Error('No user on the session!');
 
-      // 2. Update Profile in Supabase
+      // 2. Update (or Create) Profile in Supabase
       const updates = {
         id: session.user.id,
         full_name: name,
@@ -99,16 +106,18 @@ export default function EditProfileScreen() {
 
       if (error) throw error;
 
-      Alert.alert(
-        'Success',
-        'Your profile has been updated successfully',
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]
-      );
+      // 3. CRITICAL: Refresh AuthContext to unlock AppNavigator
+      await refreshProfile();
+
+      if (!isNewUser) {
+        Alert.alert('Success', 'Your profile has been updated successfully', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      } else {
+        // For new users, AppNavigator will automatically switch to "Main" 
+        // once 'refreshProfile' updates the context.
+      }
+
     } catch (error) {
       if (error instanceof Error) {
         Alert.alert('Error', error.message);
@@ -126,7 +135,6 @@ export default function EditProfileScreen() {
   const bioLength = bio.length;
   const maxBioLength = 200;
 
-  // Render Loading State
   if (isLoading) {
     return (
       <View style={[styles.container, styles.center]}>
@@ -141,11 +149,18 @@ export default function EditProfileScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
-          <Text style={styles.backIcon}>←</Text>
-        </TouchableOpacity>
+        {/* Hide Back Button if Setup Mode */}
+        {!isNewUser ? (
+          <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
+            <Text style={styles.backIcon}>←</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.placeholder} />
+        )}
 
-        <Text style={styles.headerTitle}>Edit Profile</Text>
+        <Text style={styles.headerTitle}>
+          {isNewUser ? 'Setup Profile' : 'Edit Profile'}
+        </Text>
 
         <View style={styles.placeholder} />
       </View>
@@ -155,16 +170,18 @@ export default function EditProfileScreen() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
+        {isNewUser && (
+          <Text style={styles.setupSubtext}>
+            Welcome! Please complete your profile to continue.
+          </Text>
+        )}
+
         {/* Profile Photo */}
         <View style={styles.photoSection}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
-              {/* LOGIC NOTE: 
-                   We display initials based on the name state. 
-                   If name is empty, we show '?' 
-                */}
               <Text style={styles.avatarText}>
-                {name ? name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase() : '??'}
+                {name ? name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase() : '?'}
               </Text>
             </View>
             <TouchableOpacity
@@ -186,7 +203,7 @@ export default function EditProfileScreen() {
               style={styles.input}
               value={name}
               onChangeText={setName}
-              placeholder="Enter your name"
+              placeholder="Enter your full name"
               placeholderTextColor={COLORS.textTertiary}
             />
           </View>
@@ -205,7 +222,6 @@ export default function EditProfileScreen() {
             <Text style={styles.dropdownArrow}>▼</Text>
           </TouchableOpacity>
 
-          {/* Dropdown Menu */}
           {showProgramDropdown && (
             <View style={styles.dropdownMenu}>
               {programs.map((prog, index) => (
@@ -262,7 +278,7 @@ export default function EditProfileScreen() {
           </View>
         </View>
 
-        {/* Save Changes Button */}
+        {/* Save/Complete Button */}
         <TouchableOpacity
           style={[styles.saveButton, isSaving && { opacity: 0.7 }]}
           onPress={handleSaveChanges}
@@ -274,7 +290,9 @@ export default function EditProfileScreen() {
           ) : (
             <>
               <Text style={styles.checkIcon}>✓</Text>
-              <Text style={styles.saveButtonText}>Save Changes</Text>
+              <Text style={styles.saveButtonText}>
+                {isNewUser ? 'Complete Setup' : 'Save Changes'}
+              </Text>
             </>
           )}
         </TouchableOpacity>
@@ -328,6 +346,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 24,
     paddingBottom: 40,
+  },
+  setupSubtext: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
   },
   photoSection: {
     alignItems: 'center',
