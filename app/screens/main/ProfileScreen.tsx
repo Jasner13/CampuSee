@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -112,8 +112,9 @@ export default function ProfileScreen() {
              const formattedPosts: Post[] = postsData.map((item: any) => ({
                 id: item.id,
                 userId: item.user_id,
-                authorName: derivedName, // Use the real name immediately
-                authorInitials: derivedInitials, // Use the real initials immediately
+                authorName: derivedName, 
+                authorInitials: derivedInitials,
+                authorAvatarUrl: fetchedProfile?.avatar_url, // Pass the avatar URL to the post
                 timestamp: getRelativeTime(item.created_at),
                 label: item.category.charAt(0).toUpperCase() + item.category.slice(1),
                 title: item.title,
@@ -183,18 +184,25 @@ export default function ProfileScreen() {
         {/* Profile Info */}
         <View style={styles.profileSection}>
           <View style={styles.avatarContainer}>
-            <LinearGradient
-              colors={GRADIENTS.primary}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.avatar}
-            >
-              {loadingProfile ? (
-                <ActivityIndicator color={COLORS.textLight} />
-              ) : (
+            {loadingProfile ? (
+              <View style={[styles.avatar, { backgroundColor: '#F3F4F6' }]}>
+                <ActivityIndicator color={COLORS.primary} />
+              </View>
+            ) : profile?.avatar_url ? (
+              <Image 
+                source={{ uri: profile.avatar_url }} 
+                style={styles.avatar} 
+              />
+            ) : (
+              <LinearGradient
+                colors={GRADIENTS.primary}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.avatar}
+              >
                 <Text style={styles.avatarText}>{initials}</Text>
-              )}
-            </LinearGradient>
+              </LinearGradient>
+            )}
             <View style={styles.onlineBadge} />
           </View>
 
@@ -331,6 +339,7 @@ const styles = StyleSheet.create({
     borderRadius: 48,
     justifyContent: 'center',
     alignItems: 'center',
+    resizeMode: 'cover',
   },
   avatarText: {
     fontSize: 32,
