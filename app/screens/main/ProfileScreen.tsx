@@ -1,9 +1,10 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, CompositeNavigationProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import type { MainTabParamList } from '../../navigation/types';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 import { BottomNav } from '../../components/BottomNav';
 import { PostCard, Post } from '../../components/cards/PostCard';
 import { GRADIENTS, COLORS } from '../../constants/colors';
@@ -11,11 +12,14 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Profile } from '../../types';
 
-type ProfileScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Profile'>;
+// FIX: Define composite type for navigation (Tab + Stack)
+type ProfileScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Profile'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 type TabType = 'myPosts' | 'saved';
 
-// Mock for Saved Posts
 const MOCK_SAVED_POSTS: Post[] = [
   {
     id: '2',
@@ -29,7 +33,6 @@ const MOCK_SAVED_POSTS: Post[] = [
   },
 ];
 
-// Helper to calculate relative time
 const getRelativeTime = (dateString: string) => {
   const date = new Date(dateString);
   const now = new Date();
@@ -53,11 +56,9 @@ export default function ProfileScreen() {
   const [initials, setInitials] = useState('??');
   const [loadingProfile, setLoadingProfile] = useState(true);
   
-  // Real Data State
   const [myPosts, setMyPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(false);
 
-  // Fetch Profile and Posts whenever screen comes into focus
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
@@ -65,12 +66,10 @@ export default function ProfileScreen() {
       const fetchData = async () => {
         if (!session?.user) return;
 
-        // Shared variables to ensure posts use the correct profile info immediately
         let fetchedProfile: Profile | null = null;
         let derivedInitials = '??';
         let derivedName = 'Anonymous Student';
 
-        // 1. Fetch Profile
         try {
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
@@ -94,7 +93,6 @@ export default function ProfileScreen() {
           if (isActive) setLoadingProfile(false);
         }
 
-        // 2. Fetch My Posts
         if (isActive) setLoadingPosts(true);
         try {
           const { data: postsData, error: postsError } = await supabase
@@ -108,13 +106,12 @@ export default function ProfileScreen() {
           }
 
           if (isActive && postsData) {
-             // Map posts using the profile data we just fetched above
              const formattedPosts: Post[] = postsData.map((item: any) => ({
                 id: item.id,
                 userId: item.user_id,
                 authorName: derivedName, 
                 authorInitials: derivedInitials,
-                authorAvatarUrl: fetchedProfile?.avatar_url, // Pass the avatar URL to the post
+                authorAvatarUrl: fetchedProfile?.avatar_url,
                 timestamp: getRelativeTime(item.created_at),
                 label: item.category.charAt(0).toUpperCase() + item.category.slice(1),
                 title: item.title,
@@ -163,7 +160,6 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={() => navigation.goBack()}>
           <Text style={styles.backIcon}>←</Text>
@@ -181,7 +177,6 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile Info */}
         <View style={styles.profileSection}>
           <View style={styles.avatarContainer}>
             {loadingProfile ? (
@@ -228,7 +223,6 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Tabs */}
         <View style={styles.tabsContainer}>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'myPosts' && styles.tabActive]}
@@ -250,7 +244,6 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Posts List */}
         <View style={styles.postsContainer}>
           {loadingPosts ? (
              <ActivityIndicator color={COLORS.primary} style={{ marginTop: 20 }} />

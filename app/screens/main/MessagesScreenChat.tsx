@@ -2,17 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import type { MainTabParamList } from '../../navigation/types';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../../navigation/types';
 import { Svg, Path } from 'react-native-svg';
 import { GRADIENTS, COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
-type MessagesScreenChatNavigationProp = BottomTabNavigationProp<MainTabParamList, 'MessagesChat'>;
-type MessagesScreenChatRouteProp = RouteProp<MainTabParamList, 'MessagesChat'>;
+// FIX: Use RootStackParamList instead of MainTabParamList
+type MessagesScreenChatNavigationProp = NativeStackNavigationProp<RootStackParamList, 'MessagesChat'>;
+type MessagesScreenChatRouteProp = RouteProp<RootStackParamList, 'MessagesChat'>;
 
-// Database Message Shape
 interface Message {
   id: string;
   content: string;
@@ -26,7 +26,6 @@ export default function MessagesScreenChat() {
   const route = useRoute<MessagesScreenChatRouteProp>();
   const { session } = useAuth();
 
-  // Get peer details passed from the Inbox screen
   const { peerId, peerName, peerInitials } = route.params;
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -40,7 +39,6 @@ export default function MessagesScreenChat() {
     navigation.goBack();
   };
 
-  // 1. Fetch Message History
   const fetchMessages = async () => {
     if (!session?.user) return;
 
@@ -56,7 +54,6 @@ export default function MessagesScreenChat() {
     }
   };
 
-  // 2. Subscribe to Realtime New Messages
   useEffect(() => {
     fetchMessages();
 
@@ -68,10 +65,9 @@ export default function MessagesScreenChat() {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          filter: `receiver_id=eq.${session?.user?.id}` // Only listen for msgs sent TO me (my sends are handled optimistically or by re-fetch)
+          filter: `receiver_id=eq.${session?.user?.id}`
         },
         (payload) => {
-          // If the message is from the person I'm currently chatting with
           if (payload.new.sender_id === peerId) {
             setMessages((prev) => [...prev, payload.new as Message]);
           }
@@ -84,20 +80,18 @@ export default function MessagesScreenChat() {
     };
   }, [peerId, session]);
 
-  // Auto-scroll to bottom when messages change
   useEffect(() => {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
   }, [messages]);
 
-  // 3. Handle Send
   const handleSend = async () => {
     if (!messageText.trim() || !session?.user || sending) return;
 
     setSending(true);
     const textToSend = messageText.trim();
-    setMessageText(''); // Clear input immediately for better UX
+    setMessageText('');
 
     try {
       const { data, error } = await supabase
@@ -117,7 +111,7 @@ export default function MessagesScreenChat() {
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      setMessageText(textToSend); // Restore text on error
+      setMessageText(textToSend);
     } finally {
       setSending(false);
     }
@@ -135,7 +129,6 @@ export default function MessagesScreenChat() {
     >
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundLight} />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
           <Svg width={32} height={32} viewBox="0 0 32 32" fill="none">
@@ -153,7 +146,6 @@ export default function MessagesScreenChat() {
             >
               <Text style={styles.avatarText}>{peerInitials}</Text>
             </LinearGradient>
-            {/* Online status is hardcoded for now until Presence is implemented */}
             <View style={styles.onlineBadge} />
           </View>
           <View style={styles.headerTextContainer}>
@@ -163,7 +155,6 @@ export default function MessagesScreenChat() {
         </View>
       </View>
 
-      {/* Chat Messages */}
       {loading ? (
         <View style={[styles.chatContainer, { justifyContent: 'center' }]}>
           <ActivityIndicator size="large" color={COLORS.primary} />
@@ -178,7 +169,6 @@ export default function MessagesScreenChat() {
           {messages.map((message, index) => {
             const isSentByMe = message.sender_id === session?.user?.id;
 
-            // Logic to group timestamps (show if first msg, or different time/sender from prev)
             const showTimestamp = index === 0 ||
               new Date(messages[index - 1].created_at).getMinutes() !== new Date(message.created_at).getMinutes() ||
               messages[index - 1].sender_id !== message.sender_id;
@@ -210,7 +200,6 @@ export default function MessagesScreenChat() {
         </ScrollView>
       )}
 
-      {/* Message Input */}
       <View style={styles.inputContainer}>
         <View style={styles.inputWrapper}>
           <TextInput
@@ -358,8 +347,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    minHeight: 80, // Slightly reduced to look better with keyboard
-    paddingBottom: 30, // Extra padding for safety
+    minHeight: 80, 
+    paddingBottom: 30, 
   },
   inputWrapper: {
     flexDirection: 'row',

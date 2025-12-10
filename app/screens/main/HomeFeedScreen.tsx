@@ -12,9 +12,10 @@ import {
   Image 
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, CompositeNavigationProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import type { MainTabParamList } from '../../navigation/types';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 import { SearchBar } from '../../components/SearchBar';
 import { CategoryChip } from '../../components/CategoryChip';
 import { PostCard, Post } from '../../components/cards/PostCard';
@@ -25,7 +26,11 @@ import { CATEGORIES, CategoryType } from '../../constants/categories';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
-type HomeFeedScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Home'>;
+// FIX: Define composite type for navigation (Tab + Stack)
+type HomeFeedScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Home'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 const getRelativeTime = (dateString: string) => {
   const date = new Date(dateString);
@@ -48,7 +53,7 @@ const getInitials = (name: string | null) => {
 
 export const HomeFeedScreen: React.FC = () => {
   const navigation = useNavigation<HomeFeedScreenNavigationProp>();
-  const { profile, refreshProfile } = useAuth(); // Use Auth Context
+  const { profile, refreshProfile } = useAuth(); 
 
   const [searchText, setSearchText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('all');
@@ -59,7 +64,6 @@ export const HomeFeedScreen: React.FC = () => {
 
   const fetchPosts = async () => {
     try {
-      // Fetches avatar_url alongside full_name
       let query = supabase
         .from('posts')
         .select(`
@@ -95,7 +99,7 @@ export const HomeFeedScreen: React.FC = () => {
           userId: item.user_id,
           authorName: item.profiles?.full_name || 'Unknown User',
           authorInitials: getInitials(item.profiles?.full_name),
-          authorAvatarUrl: item.profiles?.avatar_url, // Map the avatar URL
+          authorAvatarUrl: item.profiles?.avatar_url,
           timestamp: getRelativeTime(item.created_at),
           label: item.category.charAt(0).toUpperCase() + item.category.slice(1),
           title: item.title,
@@ -113,11 +117,9 @@ export const HomeFeedScreen: React.FC = () => {
     }
   };
 
-  // Initial Fetch & Listener setup
   useEffect(() => {
     fetchPosts();
 
-    // Listen for updates from other screens
     const subscription = DeviceEventEmitter.addListener('post_updated', () => {
         setLoading(true);
         fetchPosts();
@@ -128,7 +130,6 @@ export const HomeFeedScreen: React.FC = () => {
     };
   }, []); 
 
-  // Re-fetch when filters change
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       setLoading(true);
@@ -137,11 +138,10 @@ export const HomeFeedScreen: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [selectedCategory, searchText]);
 
-  // Also fetch when screen gains focus
   useFocusEffect(
     useCallback(() => {
       fetchPosts();
-      refreshProfile(); // Ensure profile data in context is fresh
+      refreshProfile(); 
     }, [selectedCategory, searchText]) 
   );
 
