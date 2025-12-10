@@ -1,4 +1,3 @@
-// app/navigation/types.ts
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import { Post } from '../components/cards/PostCard';
 
@@ -16,6 +15,7 @@ export type MainTabParamList = {
     peerId: string;
     peerName: string;
     peerInitials: string;
+    peerAvatarUrl?: string | null;
   };
   CreatePost: undefined;
   Notifications: undefined;
@@ -30,16 +30,24 @@ export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
   Main: NavigatorScreenParams<MainTabParamList>;
   
-  // Post Details
+ 
   PostDetails: { post: Post };
   
-  // Settings & Profile
+ 
   Settings: undefined;
   EditProfile: { isNewUser?: boolean } | undefined;
   ChangePassword: undefined;
   
-  // Dedicated route for the onboarding flow using the same component
-  SetupProfile: { isNewUser: boolean }; 
+  
+  SetupProfile: { isNewUser: boolean };
+  
+  
+  MessagesChat: {
+    peerId: string;
+    peerName: string;
+    peerInitials: string;
+    peerAvatarUrl?: string | null;
+  };
 };
 
 declare global {
