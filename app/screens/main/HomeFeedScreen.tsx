@@ -6,8 +6,9 @@ import {
   StyleSheet, 
   StatusBar, 
   TouchableOpacity, 
-  RefreshControl,
-  ActivityIndicator 
+  RefreshControl, 
+  ActivityIndicator, 
+  DeviceEventEmitter 
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -24,12 +25,10 @@ import { supabase } from '../../lib/supabase';
 
 type HomeFeedScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Home'>;
 
-// Helper to calculate "2 hours ago", "Just now", etc.
 const getRelativeTime = (dateString: string) => {
   const date = new Date(dateString);
   const now = new Date();
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
   if (seconds < 60) return 'Just now';
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
@@ -37,19 +36,12 @@ const getRelativeTime = (dateString: string) => {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}d ago`;
-  
   return date.toLocaleDateString();
 };
 
-// Helper to get initials from a name
 const getInitials = (name: string | null) => {
   if (!name) return '??';
-  return name
-    .split(' ')
-    .map(n => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 };
 
 export const HomeFeedScreen: React.FC = () => {
@@ -57,7 +49,6 @@ export const HomeFeedScreen: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('all');
   
-  // State for Real Data
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,18 +58,9 @@ export const HomeFeedScreen: React.FC = () => {
     try {
       let query = supabase
         .from('posts')
-        .select(`
-          id,
-          created_at,
-          title,
-          description,
-          category,
-          user_id,
-          profiles (full_name)
-        `)
+        .select(`id, created_at, title, description, category, user_id, file_url, profiles (full_name)`)
         .order('created_at', { ascending: false });
 
-      // Apply Filters
       if (selectedCategory !== 'all') {
         query = query.eq('category', selectedCategory);
       }
@@ -97,12 +79,15 @@ export const HomeFeedScreen: React.FC = () => {
       if (data) {
         const formattedPosts: Post[] = data.map((item: any) => ({
           id: item.id,
+          userId: item.user_id,
           authorName: item.profiles?.full_name || 'Unknown User',
           authorInitials: getInitials(item.profiles?.full_name),
           timestamp: getRelativeTime(item.created_at),
-          label: item.category.charAt(0).toUpperCase() + item.category.slice(1), // Capitalize
+          label: item.category.charAt(0).toUpperCase() + item.category.slice(1),
           title: item.title,
           description: item.description,
+          category: item.category,
+          fileUrl: item.file_url
         }));
         setPosts(formattedPosts);
       }
@@ -117,56 +102,51 @@ export const HomeFeedScreen: React.FC = () => {
   const fetchUserProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', user.id)
-        .single();
-      
-      if (data?.full_name) {
-        setCurrentUserInitials(getInitials(data.full_name));
-      }
+      const { data } = await supabase.from('profiles').select('full_name').eq('id', user.id).single();
+      if (data?.full_name) setCurrentUserInitials(getInitials(data.full_name));
     }
   };
 
-  // Initial Fetch
+  // Initial Fetch & Listener setup
   useEffect(() => {
     fetchUserProfile();
     fetchPosts();
-  }, []);
+
+    // Listen for updates from other screens (like Deleting a post)
+    const subscription = DeviceEventEmitter.addListener('post_updated', () => {
+        setLoading(true);
+        fetchPosts();
+    });
+
+    return () => {
+        subscription.remove();
+    };
+  }, []); // Run once on mount
 
   // Re-fetch when filters change
   useEffect(() => {
-    // Debounce search slightly to avoid too many requests while typing
     const timeoutId = setTimeout(() => {
       setLoading(true);
       fetchPosts();
     }, 500);
-
     return () => clearTimeout(timeoutId);
   }, [selectedCategory, searchText]);
 
-  // Re-fetch when coming back to this screen (e.g. after creating a post)
+  // Also fetch when screen gains focus (fallback)
   useFocusEffect(
     useCallback(() => {
       fetchPosts();
-    }, [])
+    }, [selectedCategory, searchText]) // Add dependencies to ensure correct state usage
   );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchPosts();
-    fetchUserProfile(); // Ensure profile is up to date too
+    fetchUserProfile();
   }, []);
 
   const handleNavigate = (item: 'home' | 'messages' | 'notifications' | 'profile') => {
-    const routeMap = {
-      home: 'Home',
-      messages: 'Messages',
-      notifications: 'Notifications',
-      profile: 'Profile',
-    } as const;
-
+    const routeMap = { home: 'Home', messages: 'Messages', notifications: 'Notifications', profile: 'Profile' } as const;
     navigation.navigate(routeMap[item]);
   };
 
@@ -182,7 +162,12 @@ export const HomeFeedScreen: React.FC = () => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      <LinearGradient colors={GRADIENTS.primary} start={{ x: 0, y: 0 }} end={{ x: 0.233, y: 1.155 }} style={styles.header}>
+      <LinearGradient 
+        colors={GRADIENTS.primary} 
+        start={{ x: 0, y: 0 }} 
+        end={{ x: 0.233, y: 1.155 }} 
+        style={styles.header}
+      >
         <View style={styles.headerContent}>
           <Text style={styles.logo}>
             <Text style={styles.logoWhite}>Campu</Text>
@@ -190,10 +175,15 @@ export const HomeFeedScreen: React.FC = () => {
           </Text>
           <TouchableOpacity 
             style={styles.profileAvatar} 
-            activeOpacity={0.8}
+            activeOpacity={0.8} 
             onPress={() => handleNavigate('profile')}
           >
-            <LinearGradient colors={GRADIENTS.accent} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.profileAvatarGradient}>
+            <LinearGradient 
+              colors={GRADIENTS.accent} 
+              start={{ x: 0, y: 0 }} 
+              end={{ x: 0, y: 1 }} 
+              style={styles.profileAvatarGradient}
+            >
               <Text style={styles.profileInitials}>{currentUserInitials}</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -206,7 +196,11 @@ export const HomeFeedScreen: React.FC = () => {
 
       <View style={styles.categoryContainer}>
         <View style={styles.categoryDividerTop} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesScrollContent}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          contentContainerStyle={styles.categoriesScrollContent}
+        >
           {CATEGORIES.map((category) => (
             <CategoryChip
               key={category.id}
@@ -225,7 +219,11 @@ export const HomeFeedScreen: React.FC = () => {
         contentContainerStyle={styles.feedContent} 
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh} 
+            tintColor={COLORS.primary} 
+          />
         }
       >
         {loading && !refreshing ? (
