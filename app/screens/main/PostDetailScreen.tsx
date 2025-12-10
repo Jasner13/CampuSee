@@ -1,13 +1,23 @@
-// app/screens/main/PostDetailScreen.tsx
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, TextInput } from 'react-native';
+import { 
+  View, 
+  Text, 
+  ScrollView, 
+  StyleSheet, 
+  StatusBar, 
+  TouchableOpacity, 
+  TextInput, 
+  Alert, 
+  DeviceEventEmitter 
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/types';
 import { GRADIENTS, COLORS } from '../../constants/colors';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
-// Updated to 'PostDetails'
 type PostDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'PostDetails'>;
 type PostDetailScreenRouteProp = RouteProp<RootStackParamList, 'PostDetails'>;
 
@@ -34,9 +44,10 @@ const MOCK_REPLIES: Reply[] = [
 export default function PostDetailScreen() {
   const navigation = useNavigation<PostDetailScreenNavigationProp>();
   const route = useRoute<PostDetailScreenRouteProp>();
-
-  // Use the 'post' object passed via navigation
+  const { session } = useAuth();
   const { post } = route.params;
+
+  const isOwner = session?.user?.id === post.userId;
 
   const [comment, setComment] = useState('');
   const [likes, setLikes] = useState(24);
@@ -46,8 +57,63 @@ export default function PostDetailScreen() {
     navigation.goBack();
   };
 
+  const deletePost = async () => {
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', post.id);
+
+      if (error) throw error;
+
+      // BROADCAST EVENT: Tell other screens to refresh
+      DeviceEventEmitter.emit('post_updated');
+
+      Alert.alert('Success', 'Post deleted successfully', [
+        { text: 'OK', onPress: () => navigation.goBack() }
+      ]);
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      Alert.alert('Error', 'Failed to delete post');
+    }
+  };
+
+  const handleEdit = () => {
+    // @ts-ignore
+    navigation.navigate('Main', {
+        screen: 'CreatePost',
+        params: { post }
+    });
+  };
+
   const handleMore = () => {
-    console.log('More options pressed');
+    if (isOwner) {
+      Alert.alert(
+        'Manage Post',
+        'Choose an action',
+        [
+          { text: 'Edit', onPress: handleEdit },
+          { 
+            text: 'Delete', 
+            onPress: () => Alert.alert(
+              'Confirm Delete',
+              'Are you sure you want to delete this post?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: deletePost }
+              ]
+            ),
+            style: 'destructive' 
+          },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+    } else {
+       Alert.alert('Options', 'Select an action', [
+           { text: 'Report Post', onPress: () => console.log('Reported') },
+           { text: 'Cancel', style: 'cancel' }
+       ]);
+    }
   };
 
   const handleLike = () => {
@@ -94,7 +160,6 @@ export default function PostDetailScreen() {
       >
         {/* Post Card */}
         <View style={styles.postCard}>
-          {/* Author Info */}
           <View style={styles.authorSection}>
             <LinearGradient
               colors={GRADIENTS.primary}
@@ -115,25 +180,23 @@ export default function PostDetailScreen() {
             </View>
           </View>
 
-          {/* Post Content */}
           <Text style={styles.postTitle}>{post.title}</Text>
           <Text style={styles.postDescription}>
             {post.description}
           </Text>
 
-          {/* ... Rest of the file remains the same ... */}
-          {/* Attachment */}
-          <View style={styles.attachment}>
-            <View style={styles.attachmentIcon}>
-              <Text style={styles.attachmentIconText}>📄</Text>
+          {post.fileUrl && (
+             <View style={styles.attachment}>
+                <View style={styles.attachmentIcon}>
+                <Text style={styles.attachmentIconText}>📄</Text>
+                </View>
+                <View style={styles.attachmentInfo}>
+                <Text style={styles.attachmentName}>Attachment</Text>
+                <Text style={styles.attachmentSize}>View File</Text>
+                </View>
             </View>
-            <View style={styles.attachmentInfo}>
-              <Text style={styles.attachmentName}>Hello.doc</Text>
-              <Text style={styles.attachmentSize}>145.67 kb</Text>
-            </View>
-          </View>
+          )}
 
-          {/* Send Message Button */}
           <TouchableOpacity
             style={styles.messageButton}
             onPress={handleSendPrivateMessage}
@@ -150,7 +213,6 @@ export default function PostDetailScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* Interaction Stats */}
           <View style={styles.statsRow}>
             <TouchableOpacity
               style={styles.statItem}
