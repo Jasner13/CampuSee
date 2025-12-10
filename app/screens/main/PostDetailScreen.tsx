@@ -9,7 +9,9 @@ import {
   TextInput, 
   Alert, 
   DeviceEventEmitter,
-  ActivityIndicator
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -226,7 +228,11 @@ export default function PostDetailScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={0}
+    >
       <StatusBar barStyle="dark-content" />
 
       {/* Header */}
@@ -246,6 +252,7 @@ export default function PostDetailScreen() {
         )}
       </View>
 
+      {/* Scrollable Content */}
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
@@ -360,37 +367,29 @@ export default function PostDetailScreen() {
                         onPress={handleLike}
                         activeOpacity={0.7}
                     >
-                        <View style={styles.iconCircle}>
-                            <Ionicons 
-                                name={isLiked ? "heart" : "heart-outline"} 
-                                size={22} 
-                                color={isLiked ? COLORS.error : "#9EA3AE"} 
-                            />
-                        </View>
-                        <Text style={styles.statNumber}>{likes}</Text>
+                        <Ionicons 
+                            name={isLiked ? "heart" : "heart-outline"} 
+                            size={20} 
+                            color={isLiked ? COLORS.error : "#9EA3AE"} 
+                        />
+                        <Text style={styles.statNumber}>24</Text>
                     </TouchableOpacity>
 
                     <View style={styles.statItem}>
-                        <View style={styles.iconCircle}>
-                            <Ionicons name="chatbubble-outline" size={22} color="#9EA3AE" />
-                        </View>
-                        <Text style={styles.statNumber}>281</Text>
+                        <Ionicons name="chatbubble-outline" size={20} color="#9EA3AE" />
+                        <Text style={styles.statNumber}>24</Text>
                     </View>
 
                     <TouchableOpacity style={styles.statItem}>
-                         <View style={styles.iconCircle}>
-                            <Ionicons name="share-social-outline" size={22} color="#9EA3AE" />
-                         </View>
+                        <Ionicons name="share-outline" size={20} color="#9EA3AE" />
                         <Text style={styles.statNumber}>24</Text>
                     </TouchableOpacity>
 
                     <View style={{ flex: 1 }} />
 
                     <TouchableOpacity style={styles.statItem}>
-                         <View style={styles.iconCircle}>
-                             <Ionicons name="bookmark-outline" size={22} color="#9EA3AE" />
-                         </View>
-                         <Text style={styles.statNumber}>24</Text>
+                        <Ionicons name="bookmark-outline" size={20} color="#9EA3AE" />
+                        <Text style={styles.statNumber}>24</Text>
                     </TouchableOpacity>
                 </View>
             </>
@@ -426,35 +425,36 @@ export default function PostDetailScreen() {
                 ))}
             </View>
         )}
-
-        {!isEditing && (
-            <View style={styles.commentSection}>
-                <TextInput
-                    style={styles.commentInput}
-                    placeholder="Add a public comment..."
-                    placeholderTextColor={COLORS.textTertiary}
-                    value={comment}
-                    onChangeText={setComment}
-                    multiline
-                />
-                <TouchableOpacity
-                    style={styles.sendButton}
-                    onPress={handleSendComment}
-                    activeOpacity={0.7}
-                >
-                    <LinearGradient
-                        colors={GRADIENTS.primary}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.sendButtonGradient}
-                    >
-                        <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
-                    </LinearGradient>
-                </TouchableOpacity>
-            </View>
-        )}
       </ScrollView>
-    </View>
+
+      {/* Fixed Comment Section at Bottom */}
+      {!isEditing && (
+          <View style={styles.commentSection}>
+              <TextInput
+                  style={styles.commentInput}
+                  placeholder="Add a public comment..."
+                  placeholderTextColor={COLORS.textTertiary}
+                  value={comment}
+                  onChangeText={setComment}
+                  multiline={false}
+              />
+              <TouchableOpacity
+                  style={styles.sendButton}
+                  onPress={handleSendComment}
+                  activeOpacity={0.7}
+              >
+                  <LinearGradient
+                      colors={GRADIENTS.primary}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.sendButtonGradient}
+                  >
+                      <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
+                  </LinearGradient>
+              </TouchableOpacity>
+          </View>
+      )}
+    </KeyboardAvoidingView>
   );
 }
 
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 40,
+    paddingBottom: 20,
   },
   postCard: {
     backgroundColor: '#FFFFFF',
@@ -672,26 +672,18 @@ const styles = StyleSheet.create({
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 16,
-  },
-  iconCircle: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: '#F7F8FA',
-      justifyContent: 'center',
-      alignItems: 'center',
+    marginRight: 24,
   },
   statNumber: {
     fontSize: 13,
     fontWeight: '600',
     color: '#9EA3AE',
-    marginLeft: 6,
+    marginLeft: 4,
   },
   repliesSection: {
     marginTop: 20,
     marginHorizontal: 16,
-    marginBottom: 100, 
+    marginBottom: 20,
   },
   repliesTitle: {
     fontSize: 16,
@@ -763,10 +755,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
   },
   commentInput: {
     flex: 1,
@@ -777,7 +765,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textPrimary,
     marginRight: 12,
-    height: 48,
+    maxHeight: 48,
   },
   sendButton: {
     width: 48,

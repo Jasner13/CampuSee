@@ -12,13 +12,16 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Profile } from '../../types';
 
+
 // FIX: Define composite type for navigation (Tab + Stack)
 type ProfileScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Profile'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
 
+
 type TabType = 'myPosts' | 'saved';
+
 
 const MOCK_SAVED_POSTS: Post[] = [
   {
@@ -32,6 +35,7 @@ const MOCK_SAVED_POSTS: Post[] = [
     description: 'Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
   },
 ];
+
 
 const getRelativeTime = (dateString: string) => {
   const date = new Date(dateString);
@@ -47,9 +51,11 @@ const getRelativeTime = (dateString: string) => {
   return date.toLocaleDateString();
 };
 
+
 export default function ProfileScreen() {
   const navigation = useNavigation<ProfileScreenNavigationProp>();
   const { session } = useAuth();
+
 
   const [activeTab, setActiveTab] = useState<TabType>('myPosts');
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -59,16 +65,20 @@ export default function ProfileScreen() {
   const [myPosts, setMyPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(false);
 
+
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
 
+
       const fetchData = async () => {
         if (!session?.user) return;
+
 
         let fetchedProfile: Profile | null = null;
         let derivedInitials = '??';
         let derivedName = 'Anonymous Student';
+
 
         try {
           const { data: profileData, error: profileError } = await supabase
@@ -77,7 +87,9 @@ export default function ProfileScreen() {
             .eq('id', session.user.id)
             .single();
 
+
           if (profileError) console.error('Error fetching profile:', profileError);
+
 
           if (isActive && profileData) {
             fetchedProfile = profileData as Profile;
@@ -93,6 +105,7 @@ export default function ProfileScreen() {
           if (isActive) setLoadingProfile(false);
         }
 
+
         if (isActive) setLoadingPosts(true);
         try {
           const { data: postsData, error: postsError } = await supabase
@@ -104,6 +117,7 @@ export default function ProfileScreen() {
           if (postsError) {
              console.error('Error fetching posts:', postsError);
           }
+
 
           if (isActive && postsData) {
              const formattedPosts: Post[] = postsData.map((item: any) => ({
@@ -128,11 +142,14 @@ export default function ProfileScreen() {
         }
       };
 
+
       fetchData();
+
 
       return () => { isActive = false; };
     }, [session])
   );
+
 
   const handleNavigate = (item: 'home' | 'messages' | 'notifications' | 'profile') => {
     const routeMap = {
@@ -144,38 +161,47 @@ export default function ProfileScreen() {
     navigation.navigate(routeMap[item]);
   };
 
+
   const handleCreatePost = () => {
     navigation.navigate('CreatePost');
   };
+
 
   const handlePostPress = (post: Post) => {
     navigation.navigate('PostDetails', { post });
   };
 
+
   const handleSettingsPress = () => {
     navigation.navigate('Settings');
   };
 
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
+
 
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={() => navigation.goBack()}>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
 
+
         <Text style={styles.headerTitle}>Profile</Text>
+
 
         <TouchableOpacity style={styles.settingsButton} activeOpacity={0.7} onPress={handleSettingsPress}>
           <Text style={styles.settingsIcon}>⚙️</Text>
         </TouchableOpacity>
       </View>
 
+
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[1]}
       >
         <View style={styles.profileSection}>
           <View style={styles.avatarContainer}>
@@ -201,6 +227,7 @@ export default function ProfileScreen() {
             <View style={styles.onlineBadge} />
           </View>
 
+
           {loadingProfile ? (
             <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: 10 }} />
           ) : (
@@ -209,6 +236,7 @@ export default function ProfileScreen() {
               <Text style={styles.userBio}>{profile?.program || 'No Program Selected'}</Text>
             </>
           )}
+
 
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
@@ -223,26 +251,30 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <View style={styles.tabsContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'myPosts' && styles.tabActive]}
-            onPress={() => setActiveTab('myPosts')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.tabText, activeTab === 'myPosts' && styles.tabTextActive]}>
-              My Posts
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'saved' && styles.tabActive]}
-            onPress={() => setActiveTab('saved')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.tabText, activeTab === 'saved' && styles.tabTextActive]}>
-              Saved
-            </Text>
-          </TouchableOpacity>
+
+        <View style={styles.stickyWrapper}>
+          <View style={styles.tabsContainer}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'myPosts' && styles.tabActive]}
+              onPress={() => setActiveTab('myPosts')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.tabText, activeTab === 'myPosts' && styles.tabTextActive]}>
+                My Posts
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'saved' && styles.tabActive]}
+              onPress={() => setActiveTab('saved')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.tabText, activeTab === 'saved' && styles.tabTextActive]}>
+                Saved
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
+
 
         <View style={styles.postsContainer}>
           {loadingPosts ? (
@@ -265,16 +297,19 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
+
       <BottomNav selected="profile" onNavigate={handleNavigate} onCreatePost={handleCreatePost} />
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -389,6 +424,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.border,
     marginHorizontal: 20,
   },
+  stickyWrapper: {
+    backgroundColor: COLORS.backgroundLight,
+  },
   tabsContainer: {
     flexDirection: 'row',
     backgroundColor: COLORS.backgroundLight,
@@ -415,5 +453,6 @@ const styles = StyleSheet.create({
   },
   postsContainer: {
     padding: 18,
+    gap: 16,
   },
 });
