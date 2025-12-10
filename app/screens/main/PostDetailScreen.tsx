@@ -79,9 +79,6 @@ export default function PostDetailScreen() {
   useEffect(() => {
     fetchComments();
     fetchInteractionStatus();
-    
-    // Set initial mock likes count (if you want to replace this with real DB count later, you can)
-    // For now we start with 0 or a number, but usually we fetch the count from DB
     fetchLikesCount();
   }, [post.id]);
 
@@ -260,8 +257,6 @@ export default function PostDetailScreen() {
       const { error } = await supabase.from('posts').delete().eq('id', post.id);
       if (error) throw error;
       
-      // File cleanup (Optional: add logic here if needed)
-
       DeviceEventEmitter.emit('post_updated');
       navigation.goBack();
     } catch (error: any) {
@@ -334,11 +329,11 @@ export default function PostDetailScreen() {
   };
 
   const handleSendPrivateMessage = () => {
-    // @ts-ignore
     navigation.navigate('MessagesChat', {
         peerId: post.userId,
         peerName: post.authorName,
         peerInitials: post.authorInitials,
+        peerAvatarUrl: post.authorAvatarUrl, // Pass avatar here
     });
   };
 
@@ -478,17 +473,17 @@ export default function PostDetailScreen() {
     const initials = item.profiles?.full_name 
         ? item.profiles.full_name.split(' ').map((n: string) => n[0]).join('').substring(0,2).toUpperCase()
         : '??';
-
+    
+    // Updated to use Avatar component
     return (
         <View style={styles.replyCard}>
-            <LinearGradient
-                colors={GRADIENTS.primary}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.replyAvatar}
-            >
-                <Text style={styles.replyAvatarText}>{initials}</Text>
-            </LinearGradient>
+            <View style={styles.replyAvatarContainer}>
+                <Avatar 
+                    initials={initials} 
+                    avatarUrl={item.profiles?.avatar_url} 
+                    size="small" 
+                />
+            </View>
 
             <View style={styles.replyContent}>
                 <View style={styles.replyHeader}>
@@ -856,18 +851,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginHorizontal: 16,
   },
-  replyAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+  replyAvatarContainer: {
     marginRight: 12,
-  },
-  replyAvatarText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
   replyContent: {
     flex: 1,

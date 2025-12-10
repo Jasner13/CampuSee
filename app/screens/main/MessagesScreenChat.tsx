@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/types';
 import { Svg, Path } from 'react-native-svg';
-import { GRADIENTS, COLORS } from '../../constants/colors';
+import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { Avatar } from '../../components/Avatar';
 
-// FIX: Use RootStackParamList instead of MainTabParamList
 type MessagesScreenChatNavigationProp = NativeStackNavigationProp<RootStackParamList, 'MessagesChat'>;
 type MessagesScreenChatRouteProp = RouteProp<RootStackParamList, 'MessagesChat'>;
 
@@ -26,7 +25,7 @@ export default function MessagesScreenChat() {
   const route = useRoute<MessagesScreenChatRouteProp>();
   const { session } = useAuth();
 
-  const { peerId, peerName, peerInitials } = route.params;
+  const { peerId, peerName, peerInitials, peerAvatarUrl } = route.params;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState('');
@@ -138,14 +137,11 @@ export default function MessagesScreenChat() {
 
         <View style={styles.headerCenter}>
           <View style={styles.avatarContainer}>
-            <LinearGradient
-              colors={GRADIENTS.primary}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.avatar}
-            >
-              <Text style={styles.avatarText}>{peerInitials}</Text>
-            </LinearGradient>
+            <Avatar 
+              initials={peerInitials} 
+              avatarUrl={peerAvatarUrl} 
+              size="default" // ~54px usually, or adjust in Avatar.tsx if needed
+            />
             <View style={styles.onlineBadge} />
           </View>
           <View style={styles.headerTextContainer}>
@@ -256,18 +252,6 @@ const styles = StyleSheet.create({
   avatarContainer: {
     position: 'relative',
     marginRight: 12,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: COLORS.textLight,
   },
   onlineBadge: {
     position: 'absolute',

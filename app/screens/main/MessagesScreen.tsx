@@ -11,8 +11,8 @@ import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Avatar } from '../../components/Avatar';
 
-// FIX: Define a composite type that allows navigation to both Tab and Stack screens
 type MessagesScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Messages'>,
   NativeStackNavigationProp<RootStackParamList>
@@ -131,15 +131,15 @@ export default function MessagesScreen() {
   };
 
   // --- Navigation to Chat ---
-  const openChat = (id: string, name: string | null) => {
+  const openChat = (id: string, name: string | null, avatarUrl: string | null) => {
     const peerName = name || 'Unknown User';
     const peerInitials = peerName.substring(0, 2).toUpperCase();
 
-    // Now strict typed: MessagesChat exists on RootStackParamList
     navigation.navigate('MessagesChat', {
       peerId: id,
       peerName: peerName,
-      peerInitials: peerInitials
+      peerInitials: peerInitials,
+      peerAvatarUrl: avatarUrl
     });
   };
 
@@ -219,14 +219,15 @@ export default function MessagesScreen() {
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.userSearchCard}
-                  onPress={() => openChat(item.id, item.full_name)}
+                  onPress={() => openChat(item.id, item.full_name, item.avatar_url)}
                 >
-                  <LinearGradient
-                    colors={['#4F46E5', '#6366F1']}
-                    style={styles.searchAvatar}
-                  >
-                    <Text style={styles.searchAvatarText}>{getInitials(item.full_name)}</Text>
-                  </LinearGradient>
+                  <View style={styles.searchAvatarContainer}>
+                    <Avatar 
+                      initials={getInitials(item.full_name)}
+                      avatarUrl={item.avatar_url}
+                      size="small"
+                    />
+                  </View>
                   <View>
                     <Text style={styles.searchName}>{item.full_name || 'No Name'}</Text>
                     <Text style={styles.searchProgram}>{item.program || 'Student'}</Text>
@@ -263,9 +264,10 @@ export default function MessagesScreen() {
                   messagePreview={item.last_message}
                   time={formatTime(item.time)}
                   initials={initials}
+                  avatarUrl={item.peer_avatar}
                   isOnline={false}
                   isUnread={isUnread}
-                  onPress={() => openChat(item.peer_id, item.peer_name)}
+                  onPress={() => openChat(item.peer_id, item.peer_name, item.peer_avatar)}
                 />
               );
             }}
@@ -373,18 +375,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  searchAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+  searchAvatarContainer: {
     marginRight: 12
-  },
-  searchAvatarText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 14
   },
   searchName: {
     fontSize: 16,

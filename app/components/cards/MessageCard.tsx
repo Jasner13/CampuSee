@@ -1,15 +1,15 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Svg, Circle, Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
-import { COLORS, GRADIENTS } from '../../constants/colors';
-import { FONTS } from '../../constants/fonts';
+import { Svg, Circle } from 'react-native-svg';
+import { COLORS } from '../../constants/colors';
+import { Avatar } from '../Avatar';
 
 interface MessageCardProps {
   name: string;
   messagePreview: string;
   time: string;
   initials: string;
+  avatarUrl?: string | null; // <--- This prop must be defined here
   isOnline?: boolean;
   isUnread?: boolean;
   onPress?: () => void;
@@ -20,6 +20,7 @@ export const MessageCard: React.FC<MessageCardProps> = ({
   messagePreview,
   time,
   initials,
+  avatarUrl,
   isOnline = false,
   isUnread = false,
   onPress,
@@ -31,27 +32,16 @@ export const MessageCard: React.FC<MessageCardProps> = ({
       activeOpacity={0.7}
     >
       <View style={styles.content}>
-        <View style={styles.avatar}>
-          <Svg width={41} height={41} viewBox="0 0 41 41">
-            <Defs>
-              <SvgLinearGradient id="avatarGradient" x1="0" y1="0" x2="9.44104" y2="46.7696" gradientUnits="userSpaceOnUse">
-                <Stop offset="0" stopColor="#667EEA" />
-                <Stop offset="1" stopColor="#764BA2" />
-              </SvgLinearGradient>
-            </Defs>
-            <Path 
-              d={isOnline 
-                ? "M20.25 0C31.4338 0 40.5 9.06623 40.5 20.25C40.5 24.4424 39.2259 28.3371 37.0439 31.5684C35.9773 30.5945 34.5582 30 33 30C29.6863 30 27 32.6863 27 36C27 37.1071 27.3003 38.1439 27.8232 39.0342C25.4836 39.9784 22.9279 40.5 20.25 40.5C9.06623 40.5 0 31.4338 0 20.25C0 9.06623 9.06623 0 20.25 0Z"
-                : "M20.25 0C31.4338 0 40.5 9.06623 40.5 20.25C40.5 31.4338 31.4338 40.5 20.25 40.5C9.06623 40.5 0 31.4338 0 20.25C0 9.06623 9.06623 0 20.25 0Z"
-              }
-              fill="url(#avatarGradient)" 
-            />
-          </Svg>
-          <Text style={styles.initials}>{initials}</Text>
+        <View style={styles.avatarContainer}>
+          <Avatar 
+            initials={initials} 
+            avatarUrl={avatarUrl} 
+            size="small" 
+          />
           {isOnline && (
             <View style={styles.onlinePing}>
-              <Svg width={9} height={9} viewBox="0 0 9 9">
-                <Circle cx="4.5" cy="4.5" r="4.5" fill="#10B981" />
+              <Svg width={12} height={12} viewBox="0 0 12 12">
+                <Circle cx="6" cy="6" r="5" fill="#10B981" stroke={COLORS.backgroundLight} strokeWidth="2" />
               </Svg>
             </View>
           )}
@@ -97,31 +87,16 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 24,
+    gap: 16,
     flex: 1,
   },
-  avatar: {
-    width: 40,
-    height: 40,
+  avatarContainer: {
     position: 'relative',
-  },
-  initials: {
-    position: 'absolute',
-    left: 9,
-    top: 11,
-    width: 21,
-    height: 20,
-    color: COLORS.textLight,
-    textAlign: 'center',
-    fontSize: 15,
-    fontWeight: '800',
   },
   onlinePing: {
     position: 'absolute',
-    left: 29,
-    top: 32,
-    width: 9,
-    height: 9,
+    bottom: -2,
+    right: -2,
   },
   messageContent: {
     flex: 1,
@@ -129,7 +104,7 @@ const styles = StyleSheet.create({
   },
   name: {
     color: COLORS.textPrimary,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
   },
   nameUnread: {
@@ -143,16 +118,17 @@ const styles = StyleSheet.create({
   },
   message: {
     color: COLORS.textSecondary,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
-    maxWidth: 200,
+    flex: 1,
   },
   messageUnread: {
     fontWeight: '700',
+    color: COLORS.textPrimary,
   },
   time: {
     color: COLORS.lightGray,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
   },
   unreadBadge: {
