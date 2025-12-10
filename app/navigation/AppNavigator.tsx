@@ -1,8 +1,10 @@
 // app/navigation/AppNavigator.tsx
 import React from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { RootStackParamList } from './types';
 import { useAuth } from '../contexts/AuthContext';
+import { COLORS } from '../constants/colors';
 
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigator } from './MainNavigator';
@@ -14,7 +16,16 @@ import PostDetailScreen from '../screens/main/PostDetailScreen';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const AppNavigator: React.FC = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, profile, isLoading } = useAuth();
+
+  // Show a loading screen while session/profile is being checked
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background }}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
 
   return (
     <Stack.Navigator
@@ -25,11 +36,24 @@ export const AppNavigator: React.FC = () => {
       }}
     >
       {!isAuthenticated ? (
+        // 1. Not Logged In -> Auth Flow
         <Stack.Screen name="Auth" component={AuthNavigator} />
+      ) : !profile?.full_name ? (
+        // 2. Logged In BUT No Name -> Force Setup Flow (The Guard)
+        <Stack.Screen 
+          name="SetupProfile" 
+          component={EditProfileScreen} 
+          initialParams={{ isNewUser: true }}
+          options={{
+            animation: 'fade',
+            gestureEnabled: false, // Prevent swiping back
+          }}
+        />
       ) : (
+        // 3. Logged In & Profile Complete -> Main App
         <>
           <Stack.Screen name="Main" component={MainNavigator} />
-          {/* Renamed to PostDetails to match types and consistent usage */}
+          
           <Stack.Screen
             name="PostDetails"
             component={PostDetailScreen}
@@ -37,6 +61,7 @@ export const AppNavigator: React.FC = () => {
               animation: 'slide_from_right',
             }}
           />
+          
           <Stack.Group
             screenOptions={{
               presentation: 'modal',
@@ -44,7 +69,6 @@ export const AppNavigator: React.FC = () => {
             }}
           >
             <Stack.Screen name="Settings" component={SettingsScreen} />
-            {/* Added EditProfile and ChangePassword here if they are meant to be modals in RootStack */}
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
             <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
           </Stack.Group>

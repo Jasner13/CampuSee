@@ -21,7 +21,7 @@ export type MainTabParamList = {
   Notifications: undefined;
   Profile: undefined;
   Settings: undefined;
-  EditProfile: undefined;
+  EditProfile: { isNewUser?: boolean } | undefined;
   ChangePassword: undefined;
   PostDetails: { post: Post };
 };
@@ -29,12 +29,17 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
   Main: NavigatorScreenParams<MainTabParamList>;
-  // Unified to 'PostDetails' to match MainTabParamList and HomeFeedScreen usage
+  
+  // Post Details
   PostDetails: { post: Post };
-  // Added missing routes used in AppNavigator
+  
+  // Settings & Profile
   Settings: undefined;
-  EditProfile: undefined;
+  EditProfile: { isNewUser?: boolean } | undefined;
   ChangePassword: undefined;
+  
+  // Dedicated route for the onboarding flow using the same component
+  SetupProfile: { isNewUser: boolean }; 
 };
 
 declare global {
