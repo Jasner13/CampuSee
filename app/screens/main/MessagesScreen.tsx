@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, ActivityIndicator, TextInput, Keyboard } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -9,10 +9,11 @@ import { BottomNav } from '../../components/BottomNav';
 import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 type MessagesScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Messages'>;
 
-// UPDATED INTERFACE: Matches the new SQL View structure
+// Existing Conversation Interface
 interface Conversation {
   peer_id: string;
   peer_name: string | null;
@@ -21,7 +22,15 @@ interface Conversation {
   time: string;
   is_read: boolean;
   sender_id: string;
-  receiver_id: string; // Added this missing field
+  receiver_id: string;
+}
+
+// New Interface for Search Results
+interface UserProfile {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  program: string | null;
 }
 
 export default function MessagesScreen() {
@@ -30,6 +39,12 @@ export default function MessagesScreen() {
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Search State
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+  const [isSearchingLoading, setIsSearchingLoading] = useState(false);
 
   const handleNavigate = (item: 'home' | 'messages' | 'notifications' | 'profile') => {
     const routeMap = {
@@ -46,39 +61,38 @@ export default function MessagesScreen() {
   };
 
   const handleBack = () => {
-    navigation.goBack();
+    if (isSearching) {
+      setIsSearching(false);
+      setSearchText('');
+      setSearchResults([]);
+      Keyboard.dismiss();
+    } else {
+      navigation.goBack();
+    }
   };
 
-  const handleSearch = () => {
-    console.log('Search button pressed');
+  const toggleSearch = () => {
+    setIsSearching(!isSearching);
+    if (!isSearching) {
+      // Just opened search
+    } else {
+      // Closed search
+      setSearchText('');
+      setSearchResults([]);
+    }
   };
 
-  const handleMessagePress = (conv: Conversation) => {
-    const name = conv.peer_name || 'Unknown User';
-    const initials = name.substring(0, 2).toUpperCase();
-
-    navigation.navigate('MessagesChat', {
-      peerId: conv.peer_id,
-      peerName: name,
-      peerInitials: initials
-    });
-  };
-
+  // --- 1. Fetch Conversations (Inbox) ---
   const fetchConversations = async () => {
     if (!session?.user) return;
-
     try {
-      // UPDATED QUERY: Much simpler now! No joins needed.
       const { data, error } = await supabase
         .from('user_conversations')
         .select('*')
         .order('time', { ascending: false });
 
       if (error) throw error;
-
-      if (data) {
-        setConversations(data as Conversation[]);
-      }
+      if (data) setConversations(data as Conversation[]);
     } catch (error) {
       console.error('Error fetching chats:', error);
     } finally {
@@ -86,9 +100,48 @@ export default function MessagesScreen() {
     }
   };
 
+  // --- 2. Search Users Logic ---
+  const handleSearchTextChange = async (text: string) => {
+    setSearchText(text);
+    if (text.length === 0) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearchingLoading(true);
+    try {
+      // Search profiles by name (ILike is case-insensitive)
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, program')
+        .neq('id', session?.user.id) // Don't show myself
+        .ilike('full_name', `%${text}%`)
+        .limit(10);
+
+      if (error) throw error;
+      setSearchResults(data || []);
+    } catch (err) {
+      console.error("Search error:", err);
+    } finally {
+      setIsSearchingLoading(false);
+    }
+  };
+
+  // --- Navigation to Chat ---
+  const openChat = (id: string, name: string | null) => {
+    const peerName = name || 'Unknown User';
+    const peerInitials = peerName.substring(0, 2).toUpperCase();
+
+    navigation.navigate('MessagesChat', {
+      peerId: id,
+      peerName: peerName,
+      peerInitials: peerInitials
+    });
+  };
+
+  // --- Lifecycle & Realtime ---
   useEffect(() => {
     fetchConversations();
-
     const channel = supabase
       .channel('public:messages')
       .on(
@@ -101,10 +154,7 @@ export default function MessagesScreen() {
         }
       )
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [session]);
 
   useFocusEffect(
@@ -127,56 +177,109 @@ export default function MessagesScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundLight} />
 
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>Messages</Text>
+        {isSearching ? (
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search users..."
+            value={searchText}
+            onChangeText={handleSearchTextChange}
+            autoFocus
+          />
+        ) : (
+          <Text style={styles.headerTitle}>Messages</Text>
+        )}
 
-        <TouchableOpacity style={styles.searchButton} onPress={handleSearch} activeOpacity={0.7}>
-          <View style={styles.searchCircle}>
-            <Svg width={32} height={32} viewBox="0 0 32 32" fill="none">
-              <Path d="M12.6667 21.3333C10.2444 21.3333 8.19467 20.4942 6.51733 18.816C4.84 17.1378 4.00089 15.088 4 12.6667C3.99911 10.2453 4.83822 8.19556 6.51733 6.51733C8.19645 4.83911 10.2462 4 12.6667 4C15.0871 4 17.1373 4.83911 18.8173 6.51733C20.4973 8.19556 21.336 10.2453 21.3333 12.6667C21.3333 13.6444 21.1778 14.5667 20.8667 15.4333C20.5556 16.3 20.1333 17.0667 19.6 17.7333L27.0667 25.2C27.3111 25.4444 27.4333 25.7556 27.4333 26.1333C27.4333 26.5111 27.3111 26.8222 27.0667 27.0667C26.8222 27.3111 26.5111 27.4333 26.1333 27.4333C25.7556 27.4333 25.4444 27.3111 25.2 27.0667L17.7333 19.6C17.0667 20.1333 16.3 20.5556 15.4333 20.8667C14.5667 21.1778 13.6444 21.3333 12.6667 21.3333ZM12.6667 18.6667C14.3333 18.6667 15.7502 18.0836 16.9173 16.9173C18.0844 15.7511 18.6676 14.3342 18.6667 12.6667C18.6658 10.9991 18.0827 9.58267 16.9173 8.41733C15.752 7.252 14.3351 6.66844 12.6667 6.66667C10.9982 6.66489 9.58178 7.24844 8.41733 8.41733C7.25289 9.58622 6.66933 11.0027 6.66667 12.6667C6.664 14.3307 7.24756 15.7476 8.41733 16.9173C9.58711 18.0871 11.0036 18.6702 12.6667 18.6667Z" fill="#64748B" />
+        <TouchableOpacity style={styles.searchButton} onPress={toggleSearch} activeOpacity={0.7}>
+          <View style={[styles.searchCircle, isSearching && styles.searchCircleActive]}>
+            <Svg width={24} height={24} viewBox="0 0 32 32" fill="none">
+              <Path d="M12.6667 21.3333C10.2444 21.3333 8.19467 20.4942 6.51733 18.816C4.84 17.1378 4.00089 15.088 4 12.6667C3.99911 10.2453 4.83822 8.19556 6.51733 6.51733C8.19645 4.83911 10.2462 4 12.6667 4C15.0871 4 17.1373 4.83911 18.8173 6.51733C20.4973 8.19556 21.336 10.2453 21.3333 12.6667C21.3333 13.6444 21.1778 14.5667 20.8667 15.4333C20.5556 16.3 20.1333 17.0667 19.6 17.7333L27.0667 25.2C27.3111 25.4444 27.4333 25.7556 27.4333 26.1333C27.4333 26.5111 27.3111 26.8222 27.0667 27.0667C26.8222 27.3111 26.5111 27.4333 26.1333 27.4333C25.7556 27.4333 25.4444 27.3111 25.2 27.0667L17.7333 19.6C17.0667 20.1333 16.3 20.5556 15.4333 20.8667C14.5667 21.1778 13.6444 21.3333 12.6667 21.3333ZM12.6667 18.6667C14.3333 18.6667 15.7502 18.0836 16.9173 16.9173C18.0844 15.7511 18.6676 14.3342 18.6667 12.6667C18.6658 10.9991 18.0827 9.58267 16.9173 8.41733C15.752 7.252 14.3351 6.66844 12.6667 6.66667C10.9982 6.66489 9.58178 7.24844 8.41733 8.41733C7.25289 9.58622 6.66933 11.0027 6.66667 12.6667C6.664 14.3307 7.24756 15.7476 8.41733 16.9173C9.58711 18.0871 11.0036 18.6702 12.6667 18.6667Z" fill={isSearching ? COLORS.primary : "#64748B"} />
             </Svg>
           </View>
         </TouchableOpacity>
       </View>
 
-      {loading ? (
-        <View style={[styles.messageList, { justifyContent: 'center' }]}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+      {/* Main Content Area */}
+      {isSearching ? (
+        // --- SEARCH RESULTS VIEW ---
+        <View style={styles.messageList}>
+          {isSearchingLoading ? (
+            <ActivityIndicator style={{ marginTop: 20 }} color={COLORS.primary} />
+          ) : (
+            <FlatList
+              data={searchResults}
+              keyExtractor={item => item.id}
+              contentContainerStyle={{ padding: 20 }}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.userSearchCard}
+                  onPress={() => openChat(item.id, item.full_name)}
+                >
+                  <LinearGradient
+                    colors={['#4F46E5', '#6366F1']}
+                    style={styles.searchAvatar}
+                  >
+                    <Text style={styles.searchAvatarText}>{getInitials(item.full_name)}</Text>
+                  </LinearGradient>
+                  <View>
+                    <Text style={styles.searchName}>{item.full_name || 'No Name'}</Text>
+                    <Text style={styles.searchProgram}>{item.program || 'Student'}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                searchText.length > 0 ? (
+                  <Text style={{ textAlign: 'center', marginTop: 20, color: COLORS.textTertiary }}>No user found.</Text>
+                ) : (
+                  <Text style={{ textAlign: 'center', marginTop: 20, color: COLORS.textTertiary }}>Type to search...</Text>
+                )
+              }
+            />
+          )}
         </View>
       ) : (
-        <FlatList
-          data={conversations}
-          keyExtractor={(item) => item.peer_id}
-          renderItem={({ item }) => {
-            const name = item.peer_name || 'Unknown';
-            const initials = getInitials(name);
-            const isUnread = item.receiver_id === session?.user.id && !item.is_read;
+        // --- CONVERSATIONS LIST VIEW ---
+        loading ? (
+          <View style={[styles.messageList, { justifyContent: 'center' }]}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+          </View>
+        ) : (
+          <FlatList
+            data={conversations}
+            keyExtractor={(item) => item.peer_id}
+            renderItem={({ item }) => {
+              const name = item.peer_name || 'Unknown';
+              const initials = getInitials(name);
+              const isUnread = item.receiver_id === session?.user.id && !item.is_read;
 
-            return (
-              <MessageCard
-                name={name}
-                messagePreview={item.last_message}
-                time={formatTime(item.time)}
-                initials={initials}
-                isOnline={false}
-                isUnread={isUnread}
-                onPress={() => handleMessagePress(item)}
-              />
-            );
-          }}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          style={styles.messageList}
-          contentContainerStyle={styles.messageListContent}
-          ListEmptyComponent={
-            <View style={{ alignItems: 'center', marginTop: 50 }}>
-              <Text style={{ color: COLORS.textTertiary }}>No messages yet.</Text>
-            </View>
-          }
-        />
+              return (
+                <MessageCard
+                  name={name}
+                  messagePreview={item.last_message}
+                  time={formatTime(item.time)}
+                  initials={initials}
+                  isOnline={false}
+                  isUnread={isUnread}
+                  onPress={() => openChat(item.peer_id, item.peer_name)}
+                />
+              );
+            }}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            style={styles.messageList}
+            contentContainerStyle={styles.messageListContent}
+            ListEmptyComponent={
+              <View style={{ alignItems: 'center', marginTop: 50 }}>
+                <Text style={{ color: COLORS.textTertiary }}>No messages yet.</Text>
+                <Text style={{ color: COLORS.primary, marginTop: 10, fontWeight: '600' }}>Tap the Search icon to find friends!</Text>
+              </View>
+            }
+          />
+        )
       )}
 
       <BottomNav
@@ -219,6 +322,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.textPrimary,
   },
+  searchInput: {
+    flex: 1,
+    height: 40,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    marginHorizontal: 10,
+    fontSize: 16
+  },
   searchButton: {
     width: 44,
     height: 44,
@@ -233,6 +345,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  searchCircleActive: {
+    backgroundColor: '#EEF2FF',
+  },
   messageList: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -245,4 +360,40 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: COLORS.background,
   },
+  // Search Result Styles
+  userSearchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.backgroundLight,
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  searchAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12
+  },
+  searchAvatarText: {
+    color: 'white',
+    fontWeight: '700',
+    fontSize: 14
+  },
+  searchName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary
+  },
+  searchProgram: {
+    fontSize: 12,
+    color: COLORS.textSecondary
+  }
 });
