@@ -20,6 +20,19 @@ interface PostCardProps {
   onPress?: () => void;
 }
 
+export interface Post {
+  id: string;
+  userId: string; 
+  authorName: string;
+  authorInitials: string;
+  timestamp: string;
+  label: string;
+  title: string;
+  description: string;
+  category?: string; 
+  fileUrl?: string | null; 
+}
+
 export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={styles.container}>

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -7,32 +7,19 @@ import type { MainTabParamList } from '../../navigation/types';
 import { BottomNav } from '../../components/BottomNav';
 import { PostCard, Post } from '../../components/cards/PostCard';
 import { GRADIENTS, COLORS } from '../../constants/colors';
-import { FONTS } from '../../constants/fonts';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-// Import the new Profile interface
-import { Profile } from '../../types'; //
+import { Profile } from '../../types';
 
 type ProfileScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Profile'>;
 
 type TabType = 'myPosts' | 'saved';
 
-// Mocks kept for now as requested
-const MOCK_MY_POSTS: Post[] = [
-  {
-    id: '1',
-    authorName: 'John Michael Pestaño',
-    authorInitials: 'XX',
-    timestamp: 'Just now',
-    label: 'Event',
-    title: 'Lorem Ipsum Dolor Sit Amet',
-    description: 'Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
-  },
-];
-
+// Mock for Saved Posts (since we are only implementing "My Posts" logic now)
 const MOCK_SAVED_POSTS: Post[] = [
   {
     id: '2',
+    userId: 'mock-user-id',
     authorName: 'First Last',
     authorInitials: 'XX',
     timestamp: 'Just now',
@@ -42,68 +29,117 @@ const MOCK_SAVED_POSTS: Post[] = [
   },
 ];
 
+// Helper to calculate "2 hours ago", "Just now" (Duplicated for standalone capability)
+const getRelativeTime = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  if (seconds < 60) return 'Just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return date.toLocaleDateString();
+};
+
 export default function ProfileScreen() {
   const navigation = useNavigation<ProfileScreenNavigationProp>();
   const { session } = useAuth();
 
   const [activeTab, setActiveTab] = useState<TabType>('myPosts');
-
-  // Dynamic Profile State
-  // Combined all profile data into a single state object
   const [profile, setProfile] = useState<Profile | null>(null);
   const [initials, setInitials] = useState('??');
-  const [loading, setLoading] = useState(true);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  
+  // Real Data State
+  const [myPosts, setMyPosts] = useState<Post[]>([]);
+  const [loadingPosts, setLoadingPosts] = useState(false);
 
-  // Fetch Profile Data whenever screen comes into focus
+  // Fetch Profile and Posts whenever screen comes into focus
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
 
-      const fetchProfile = async () => {
+      const fetchData = async () => {
         if (!session?.user) return;
 
+        // 1. Fetch Profile
         try {
-          const { data, error } = await supabase
+          const { data: profileData, error: profileError } = await supabase
             .from('profiles')
-            // Fetch all fields defined in the Profile interface (using '*')
             .select('*')
             .eq('id', session.user.id)
             .single();
 
-          if (error) {
-            console.error('Error fetching profile:', error);
-            return;
-          }
+          if (profileError) console.error('Error fetching profile:', profileError);
 
-          if (isActive && data) {
-            // Set the entire profile data object
-            setProfile(data as Profile);
-
-            const fullName = data.full_name || 'Anonymous Student';
-
-            // Calculate Initials from the fetched name
-            const derivedInitials = fullName
-              .split(' ')
-              .map((n: string) => n[0])
-              .join('')
-              .substring(0, 2)
-              .toUpperCase();
-            setInitials(derivedInitials);
+          if (isActive && profileData) {
+            setProfile(profileData as Profile);
+            const fullName = profileData.full_name || 'Anonymous Student';
+            setInitials(
+              fullName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()
+            );
           }
         } catch (err) {
           console.error('Profile fetch error:', err);
         } finally {
-          if (isActive) setLoading(false);
+          if (isActive) setLoadingProfile(false);
+        }
+
+        // 2. Fetch My Posts
+        if (isActive) setLoadingPosts(true);
+        try {
+          const { data: postsData, error: postsError } = await supabase
+            .from('posts')
+            .select('*')
+            .eq('user_id', session.user.id)
+            .order('created_at', { ascending: false });
+          
+          if (postsError) {
+             console.error('Error fetching posts:', postsError);
+          }
+
+          if (isActive && postsData) {
+             const formattedPosts: Post[] = postsData.map((item: any) => ({
+                id: item.id,
+                userId: item.user_id,
+                // We use temporary placeholders, updated by useEffect below once profile is known
+                authorName: 'You', 
+                authorInitials: '..',
+                timestamp: getRelativeTime(item.created_at),
+                label: item.category.charAt(0).toUpperCase() + item.category.slice(1),
+                title: item.title,
+                description: item.description,
+                category: item.category,
+                fileUrl: item.file_url
+             }));
+             setMyPosts(formattedPosts);
+          }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            if (isActive) setLoadingPosts(false);
         }
       };
 
-      fetchProfile();
+      fetchData();
 
-      return () => {
-        isActive = false;
-      };
+      return () => { isActive = false; };
     }, [session])
   );
+
+  // Update post author info once profile is loaded
+  useEffect(() => {
+    if (profile && myPosts.length > 0 && myPosts[0].authorName === 'You') {
+        setMyPosts(prev => prev.map(p => ({
+            ...p,
+            authorName: profile.full_name || 'Anonymous',
+            authorInitials: initials
+        })));
+    }
+  }, [profile, initials, myPosts.length]);
 
   const handleNavigate = (item: 'home' | 'messages' | 'notifications' | 'profile') => {
     const routeMap = {
@@ -112,7 +148,6 @@ export default function ProfileScreen() {
       notifications: 'Notifications',
       profile: 'Profile',
     } as const;
-
     navigation.navigate(routeMap[item]);
   };
 
@@ -121,20 +156,18 @@ export default function ProfileScreen() {
   };
 
   const handlePostPress = (post: Post) => {
-    console.log('Post pressed:', post.id);
+    navigation.navigate('PostDetails', { post });
   };
 
   const handleSettingsPress = () => {
     navigation.navigate('Settings');
   };
 
-  const postsToDisplay = activeTab === 'myPosts' ? MOCK_MY_POSTS : MOCK_SAVED_POSTS;
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header (No changes here) */}
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={() => navigation.goBack()}>
           <Text style={styles.backIcon}>←</Text>
@@ -161,7 +194,7 @@ export default function ProfileScreen() {
               end={{ x: 1, y: 1 }}
               style={styles.avatar}
             >
-              {loading ? (
+              {loadingProfile ? (
                 <ActivityIndicator color={COLORS.textLight} />
               ) : (
                 <Text style={styles.avatarText}>{initials}</Text>
@@ -170,31 +203,29 @@ export default function ProfileScreen() {
             <View style={styles.onlineBadge} />
           </View>
 
-          {loading ? (
+          {loadingProfile ? (
             <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: 10 }} />
           ) : (
             <>
-              {/* Dynamic Name from fetched data */}
               <Text style={styles.userName}>{profile?.full_name || 'Anonymous Student'}</Text>
-              {/* Dynamic Program from fetched data */}
               <Text style={styles.userBio}>{profile?.program || 'No Program Selected'}</Text>
             </>
           )}
 
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>12</Text>
+              <Text style={styles.statNumber}>{myPosts.length}</Text>
               <Text style={styles.statLabel}>POSTS CREATED</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>8</Text>
+              <Text style={styles.statNumber}>0</Text>
               <Text style={styles.statLabel}>FAVORS COMPLETED</Text>
             </View>
           </View>
         </View>
 
-        {/* Tabs (No changes here) */}
+        {/* Tabs */}
         <View style={styles.tabsContainer}>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'myPosts' && styles.tabActive]}
@@ -216,11 +247,25 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Posts List (Uses MOCK data) */}
+        {/* Posts List */}
         <View style={styles.postsContainer}>
-          {postsToDisplay.map((post) => (
-            <PostCard key={post.id} post={post} onPress={() => handlePostPress(post)} />
-          ))}
+          {loadingPosts ? (
+             <ActivityIndicator color={COLORS.primary} style={{ marginTop: 20 }} />
+          ) : activeTab === 'myPosts' ? (
+             myPosts.length === 0 ? (
+                 <View style={{ alignItems: 'center', marginTop: 30 }}>
+                    <Text style={{ color: COLORS.textSecondary }}>No posts yet.</Text>
+                 </View>
+             ) : (
+                 myPosts.map((post) => (
+                    <PostCard key={post.id} post={post} onPress={() => handlePostPress(post)} />
+                 ))
+             )
+          ) : (
+             MOCK_SAVED_POSTS.map((post) => (
+               <PostCard key={post.id} post={post} onPress={() => handlePostPress(post)} />
+             ))
+          )}
         </View>
       </ScrollView>
 
