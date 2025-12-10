@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, ActivityIndicator, TextInput, Keyboard } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, CompositeNavigationProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import type { MainTabParamList } from '../../navigation/types';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 import { MessageCard } from '../../components/cards/MessageCard';
 import { BottomNav } from '../../components/BottomNav';
 import { COLORS } from '../../constants/colors';
@@ -11,9 +12,12 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 
-type MessagesScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Messages'>;
+// FIX: Define a composite type that allows navigation to both Tab and Stack screens
+type MessagesScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Messages'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
-// Existing Conversation Interface
 interface Conversation {
   peer_id: string;
   peer_name: string | null;
@@ -25,7 +29,6 @@ interface Conversation {
   receiver_id: string;
 }
 
-// New Interface for Search Results
 interface UserProfile {
   id: string;
   full_name: string | null;
@@ -110,7 +113,7 @@ export default function MessagesScreen() {
 
     setIsSearchingLoading(true);
     try {
-      // Search profiles by name (ILike is case-insensitive)
+      // Search profiles by name
       const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name, avatar_url, program')
@@ -132,6 +135,7 @@ export default function MessagesScreen() {
     const peerName = name || 'Unknown User';
     const peerInitials = peerName.substring(0, 2).toUpperCase();
 
+    // Now strict typed: MessagesChat exists on RootStackParamList
     navigation.navigate('MessagesChat', {
       peerId: id,
       peerName: peerName,
@@ -177,7 +181,6 @@ export default function MessagesScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundLight} />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
           <Text style={styles.backIcon}>←</Text>
@@ -204,9 +207,7 @@ export default function MessagesScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Main Content Area */}
       {isSearching ? (
-        // --- SEARCH RESULTS VIEW ---
         <View style={styles.messageList}>
           {isSearchingLoading ? (
             <ActivityIndicator style={{ marginTop: 20 }} color={COLORS.primary} />
@@ -243,7 +244,6 @@ export default function MessagesScreen() {
           )}
         </View>
       ) : (
-        // --- CONVERSATIONS LIST VIEW ---
         loading ? (
           <View style={[styles.messageList, { justifyContent: 'center' }]}>
             <ActivityIndicator size="large" color={COLORS.primary} />
@@ -360,7 +360,6 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: COLORS.background,
   },
-  // Search Result Styles
   userSearchCard: {
     flexDirection: 'row',
     alignItems: 'center',

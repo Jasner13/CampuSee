@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -19,6 +19,7 @@ import { GRADIENTS, COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import { Avatar } from '../../components/Avatar';
 
 type PostDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'PostDetails'>;
 type PostDetailScreenRouteProp = RouteProp<RootStackParamList, 'PostDetails'>;
@@ -48,9 +49,12 @@ export default function PostDetailScreen() {
   const route = useRoute<PostDetailScreenRouteProp>();
   const { session } = useAuth();
   
-  // Initialize local state with params so we can update it immediately
   const { post: initialPost } = route.params;
   const [post, setPost] = useState(initialPost);
+
+  useEffect(() => {
+    setPost(initialPost);
+  }, [initialPost]);
 
   const isOwner = session?.user?.id === post.userId;
 
@@ -116,8 +120,6 @@ export default function PostDetailScreen() {
     }
   };
 
-  // --- EDIT FUNCTIONS ---
-
   const startEditing = () => {
     setEditTitle(post.title);
     setEditDescription(post.description);
@@ -150,7 +152,6 @@ export default function PostDetailScreen() {
 
       if (error) throw error;
 
-      // Update local state immediately
       setPost(prev => ({ 
         ...prev, 
         title: data.title, 
@@ -158,10 +159,7 @@ export default function PostDetailScreen() {
       }));
 
       setIsEditing(false);
-      
-      // Notify other screens (HomeFeed) to refresh
       DeviceEventEmitter.emit('post_updated');
-      
       Alert.alert('Success', 'Post updated successfully');
     } catch (error: any) {
       console.error('Update failed:', error);
@@ -170,8 +168,6 @@ export default function PostDetailScreen() {
       setIsSaving(false);
     }
   };
-
-  // ---------------------
 
   const handleMore = () => {
     if (isOwner) {
@@ -213,7 +209,13 @@ export default function PostDetailScreen() {
   };
 
   const handleSendPrivateMessage = () => {
-    console.log('Send private message');
+    // Navigate directly to MessagesChat in the root stack
+    // @ts-ignore - The types will resolve at runtime, MessagesChat is in RootStack now
+    navigation.navigate('MessagesChat', {
+        peerId: post.userId,
+        peerName: post.authorName,
+        peerInitials: post.authorInitials,
+    });
   };
 
   const handleSendComment = () => {
@@ -250,29 +252,25 @@ export default function PostDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.postCard}>
-          {/* Author Header */}
           <View style={styles.authorSection}>
-            <LinearGradient
-              colors={GRADIENTS.primary}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.avatar}
-            >
-              <Text style={styles.avatarText}>{post.authorInitials}</Text>
-            </LinearGradient>
+            <View style={{ marginRight: 12 }}>
+                <Avatar 
+                    initials={post.authorInitials} 
+                    avatarUrl={post.authorAvatarUrl}
+                    size="default" 
+                />
+            </View>
 
             <View style={styles.authorInfo}>
               <Text style={styles.authorName}>{post.authorName}</Text>
               <Text style={styles.timestamp}>{post.timestamp}</Text>
             </View>
             
-            {/* Added "Study" Badge from design */}
             <View style={styles.headerBadge}>
               <Text style={styles.headerBadgeText}>Study</Text>
             </View>
           </View>
 
-          {/* EDITABLE TITLE */}
           {isEditing ? (
             <TextInput
                 style={styles.editTitleInput}
@@ -285,7 +283,6 @@ export default function PostDetailScreen() {
             <Text style={styles.postTitle}>{post.title}</Text>
           )}
 
-          {/* EDITABLE DESCRIPTION */}
           {isEditing ? (
              <TextInput
                 style={styles.editDescInput}
@@ -301,7 +298,6 @@ export default function PostDetailScreen() {
             </Text>
           )}
 
-          {/* SAVE / CANCEL BUTTONS */}
           {isEditing && (
             <View style={styles.editButtonsRow}>
                 <TouchableOpacity 
@@ -328,7 +324,6 @@ export default function PostDetailScreen() {
           {post.fileUrl && !isEditing && (
              <View style={styles.attachment}>
                 <View style={styles.attachmentIcon}>
-                    {/* Changed color to white to match blue bg or blue icon on light bg */}
                     <Ionicons name="document-text" size={24} color="#5C6BC0" />
                 </View>
                 <View style={styles.attachmentInfo}>
@@ -338,25 +333,26 @@ export default function PostDetailScreen() {
             </View>
           )}
 
-          {/* Buttons & Stats */}
           {!isEditing && (
             <>
-                <TouchableOpacity
-                    style={styles.messageButton}
-                    onPress={handleSendPrivateMessage}
-                    activeOpacity={0.8}
-                >
-                    <LinearGradient
-                        // Switched to primary gradient (Purple/Violet) to match design
-                        colors={GRADIENTS.primary}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={styles.messageButtonGradient}
+                
+                {(!isOwner) && (
+                    <TouchableOpacity
+                        style={styles.messageButton}
+                        onPress={handleSendPrivateMessage}
+                        activeOpacity={0.8}
                     >
-                        <Ionicons name="chatbubble-ellipses" size={20} color="#FFF" style={{marginRight: 8}} />
-                        <Text style={styles.messageButtonText}>Send Private Message</Text>
-                    </LinearGradient>
-                </TouchableOpacity>
+                        <LinearGradient
+                            colors={GRADIENTS.primary}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={styles.messageButtonGradient}
+                        >
+                            <Ionicons name="chatbubble-ellipses" size={20} color="#FFF" style={{marginRight: 8}} />
+                            <Text style={styles.messageButtonText}>Send Private Message</Text>
+                        </LinearGradient>
+                    </TouchableOpacity>
+                )}
 
                 <View style={styles.statsRow}>
                     <TouchableOpacity
@@ -388,7 +384,6 @@ export default function PostDetailScreen() {
                         <Text style={styles.statNumber}>24</Text>
                     </TouchableOpacity>
 
-                    {/* Spacer to push Bookmark to the right */}
                     <View style={{ flex: 1 }} />
 
                     <TouchableOpacity style={styles.statItem}>
@@ -402,7 +397,6 @@ export default function PostDetailScreen() {
           )}
         </View>
 
-        {/* Public Replies Section */}
         {!isEditing && (
             <View style={styles.repliesSection}>
                 <Text style={styles.repliesTitle}>Public Replies (2)</Text>
@@ -433,7 +427,6 @@ export default function PostDetailScreen() {
             </View>
         )}
 
-        {/* Comment Input */}
         {!isEditing && (
             <View style={styles.commentSection}>
                 <TextInput
@@ -468,7 +461,7 @@ export default function PostDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA', // Slightly gray outer background to pop the white cards
+    backgroundColor: '#F5F7FA', 
   },
   header: {
     flexDirection: 'row',
@@ -525,19 +518,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
   authorInfo: {
     flex: 1,
   },
@@ -552,15 +532,14 @@ const styles = StyleSheet.create({
     color: '#9EA3AE',
     fontWeight: '500',
   },
-  // Added Badge Style
   headerBadge: {
-    backgroundColor: '#E6F7F5', // Light Green bg
+    backgroundColor: '#E6F7F5',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
   },
   headerBadgeText: {
-    color: '#00BFA5', // Teal/Green text
+    color: '#00BFA5',
     fontWeight: '700',
     fontSize: 12,
   },
@@ -577,7 +556,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 20,
   },
-  // EDIT INPUT STYLES
   editTitleInput: {
     fontSize: 20,
     fontWeight: '700',
@@ -630,11 +608,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  // ----------------
   attachment: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E8EAF6', // Light Indigo/Purple Tint
+    backgroundColor: '#E8EAF6', 
     padding: 16,
     borderRadius: 12,
     marginBottom: 24,
@@ -701,7 +678,7 @@ const styles = StyleSheet.create({
       width: 36,
       height: 36,
       borderRadius: 18,
-      backgroundColor: '#F7F8FA', // Circle bg for icons
+      backgroundColor: '#F7F8FA',
       justifyContent: 'center',
       alignItems: 'center',
   },
@@ -714,7 +691,7 @@ const styles = StyleSheet.create({
   repliesSection: {
     marginTop: 20,
     marginHorizontal: 16,
-    marginBottom: 100, // Space for footer
+    marginBottom: 100, 
   },
   repliesTitle: {
     fontSize: 16,

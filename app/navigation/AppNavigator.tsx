@@ -1,4 +1,3 @@
-// app/navigation/AppNavigator.tsx
 import React from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -12,13 +11,13 @@ import SettingsScreen from '../screens/settings/SettingsScreen';
 import EditProfileScreen from '../screens/settings/EditProfileScreen';
 import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
 import PostDetailScreen from '../screens/main/PostDetailScreen';
+import MessagesScreenChat from '../screens/main/MessagesScreenChat';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const AppNavigator: React.FC = () => {
   const { isAuthenticated, profile, isLoading } = useAuth();
 
-  // Show a loading screen while session/profile is being checked
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background }}>
@@ -29,37 +28,35 @@ export const AppNavigator: React.FC = () => {
 
   return (
     <Stack.Navigator
-      id={undefined}
+      id={undefined} // RESTORED THIS LINE
       screenOptions={{
         headerShown: false,
         animation: 'fade',
       }}
     >
       {!isAuthenticated ? (
-        // 1. Not Logged In -> Auth Flow
         <Stack.Screen name="Auth" component={AuthNavigator} />
       ) : !profile?.full_name ? (
-        // 2. Logged In BUT No Name -> Force Setup Flow (The Guard)
         <Stack.Screen 
           name="SetupProfile" 
           component={EditProfileScreen} 
           initialParams={{ isNewUser: true }}
-          options={{
-            animation: 'fade',
-            gestureEnabled: false, // Prevent swiping back
-          }}
+          options={{ animation: 'fade', gestureEnabled: false }}
         />
       ) : (
-        // 3. Logged In & Profile Complete -> Main App
         <>
           <Stack.Screen name="Main" component={MainNavigator} />
           
           <Stack.Screen
             name="PostDetails"
             component={PostDetailScreen}
-            options={{
-              animation: 'slide_from_right',
-            }}
+            options={{ animation: 'slide_from_right' }}
+          />
+
+          <Stack.Screen 
+            name="MessagesChat" 
+            component={MessagesScreenChat} 
+            options={{ animation: 'slide_from_right' }}
           />
           
           <Stack.Group
