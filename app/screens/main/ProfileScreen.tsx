@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -15,7 +15,7 @@ type ProfileScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Pr
 
 type TabType = 'myPosts' | 'saved';
 
-// Mock for Saved Posts (since we are only implementing "My Posts" logic now)
+// Mock for Saved Posts
 const MOCK_SAVED_POSTS: Post[] = [
   {
     id: '2',
@@ -29,7 +29,7 @@ const MOCK_SAVED_POSTS: Post[] = [
   },
 ];
 
-// Helper to calculate "2 hours ago", "Just now" (Duplicated for standalone capability)
+// Helper to calculate relative time
 const getRelativeTime = (dateString: string) => {
   const date = new Date(dateString);
   const now = new Date();
@@ -65,6 +65,11 @@ export default function ProfileScreen() {
       const fetchData = async () => {
         if (!session?.user) return;
 
+        // Shared variables to ensure posts use the correct profile info immediately
+        let fetchedProfile: Profile | null = null;
+        let derivedInitials = '??';
+        let derivedName = 'Anonymous Student';
+
         // 1. Fetch Profile
         try {
           const { data: profileData, error: profileError } = await supabase
@@ -76,11 +81,12 @@ export default function ProfileScreen() {
           if (profileError) console.error('Error fetching profile:', profileError);
 
           if (isActive && profileData) {
-            setProfile(profileData as Profile);
-            const fullName = profileData.full_name || 'Anonymous Student';
-            setInitials(
-              fullName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()
-            );
+            fetchedProfile = profileData as Profile;
+            setProfile(fetchedProfile);
+            
+            derivedName = fetchedProfile.full_name || 'Anonymous Student';
+            derivedInitials = derivedName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase();
+            setInitials(derivedInitials);
           }
         } catch (err) {
           console.error('Profile fetch error:', err);
@@ -102,12 +108,12 @@ export default function ProfileScreen() {
           }
 
           if (isActive && postsData) {
+             // Map posts using the profile data we just fetched above
              const formattedPosts: Post[] = postsData.map((item: any) => ({
                 id: item.id,
                 userId: item.user_id,
-                // We use temporary placeholders, updated by useEffect below once profile is known
-                authorName: 'You', 
-                authorInitials: '..',
+                authorName: derivedName, // Use the real name immediately
+                authorInitials: derivedInitials, // Use the real initials immediately
                 timestamp: getRelativeTime(item.created_at),
                 label: item.category.charAt(0).toUpperCase() + item.category.slice(1),
                 title: item.title,
@@ -129,17 +135,6 @@ export default function ProfileScreen() {
       return () => { isActive = false; };
     }, [session])
   );
-
-  // Update post author info once profile is loaded
-  useEffect(() => {
-    if (profile && myPosts.length > 0 && myPosts[0].authorName === 'You') {
-        setMyPosts(prev => prev.map(p => ({
-            ...p,
-            authorName: profile.full_name || 'Anonymous',
-            authorInitials: initials
-        })));
-    }
-  }, [profile, initials, myPosts.length]);
 
   const handleNavigate = (item: 'home' | 'messages' | 'notifications' | 'profile') => {
     const routeMap = {
