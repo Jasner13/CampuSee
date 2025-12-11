@@ -14,9 +14,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../../navigation/types';
-import { Svg, Path } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants/colors';
+import { Ionicons } from '@expo/vector-icons'; // Import Ionicons
 
 const { height, width } = Dimensions.get('window');
 const DESIGN_HEIGHT = 896;
@@ -151,6 +152,7 @@ export default function SignUpScreen() {
                   onChangeText={setEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  autoCorrect={false}
                 />
               </View>
             </View>
@@ -172,23 +174,44 @@ export default function SignUpScreen() {
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
+                  autoCorrect={false}
+                  spellCheck={false}
+                  textContentType="none"
+                  autoCapitalize="none"
+                  keyboardType="default"
+                  autoComplete="off"
+                  importantForAutofill="no"
                 />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                  <Text style={{ fontSize: 18 }}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons 
+                    name={showPassword ? "eye-off" : "eye"} 
+                    size={22} 
+                    color={COLORS.textSecondary} // Using textSecondary for the icon color
+                  />
                 </TouchableOpacity>
               </View>
             </View>
           </View>
 
-          {/* Password Strength Indicators */}
+          {/* Password Strength Identifiers - Fixed Layout */}
           <View style={styles.requirementsContainer}>
-            <View style={styles.reqRow}>
-              <Text style={[styles.reqText, passwordChecks.length && styles.reqMet]}>{passwordChecks.length ? '✓' : '•'} 8+ chars</Text>
-              <Text style={[styles.reqText, passwordChecks.uppercase && styles.reqMet]}>{passwordChecks.uppercase ? '✓' : '•'} Uppercase</Text>
-            </View>
-            <View style={styles.reqRow}>
-              <Text style={[styles.reqText, passwordChecks.lowercase && styles.reqMet]}>{passwordChecks.lowercase ? '✓' : '•'} Lowercase</Text>
-              <Text style={[styles.reqText, passwordChecks.number && styles.reqMet]}>{passwordChecks.number ? '✓' : '•'} Number</Text>
+            <View style={styles.reqGrid}>
+              <View style={styles.reqItem}>
+                <Ionicons name={passwordChecks.length ? "checkmark-circle" : "ellipse-outline"} size={14} color={passwordChecks.length ? "#10B981" : "#E2E8F0"} />
+                <Text style={[styles.reqText, passwordChecks.length && styles.reqMetText]}>8+ chars</Text>
+              </View>
+              <View style={styles.reqItem}>
+                <Ionicons name={passwordChecks.uppercase ? "checkmark-circle" : "ellipse-outline"} size={14} color={passwordChecks.uppercase ? "#10B981" : "#E2E8F0"} />
+                <Text style={[styles.reqText, passwordChecks.uppercase && styles.reqMetText]}>Uppercase</Text>
+              </View>
+              <View style={styles.reqItem}>
+                <Ionicons name={passwordChecks.lowercase ? "checkmark-circle" : "ellipse-outline"} size={14} color={passwordChecks.lowercase ? "#10B981" : "#E2E8F0"} />
+                <Text style={[styles.reqText, passwordChecks.lowercase && styles.reqMetText]}>Lowercase</Text>
+              </View>
+              <View style={styles.reqItem}>
+                <Ionicons name={passwordChecks.number ? "checkmark-circle" : "ellipse-outline"} size={14} color={passwordChecks.number ? "#10B981" : "#E2E8F0"} />
+                <Text style={[styles.reqText, passwordChecks.number && styles.reqMetText]}>Number</Text>
+              </View>
             </View>
           </View>
 
@@ -230,8 +253,34 @@ const styles = StyleSheet.create({
   buttonContainer: { width: '100%', paddingHorizontal: scaleX(40), height: scaleY(64) },
   supplementalContainer: { width: '100%', paddingHorizontal: scaleX(49), height: scaleY(44), justifyContent: 'center', alignItems: 'center' },
   supplementalText: { color: '#64748B', textAlign: 'center', fontSize: scaleY(14), fontWeight: '500', lineHeight: scaleY(20) },
-  requirementsContainer: { width: '100%', paddingHorizontal: scaleX(50), marginTop: scaleY(-10), marginBottom: scaleY(10) },
-  reqRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
-  reqText: { color: '#E2E8F0', fontSize: 12, fontWeight: '600' },
-  reqMet: { color: '#10B981' }
+  
+  // Revised Requirements Styling
+  requirementsContainer: { 
+    width: '100%', 
+    paddingHorizontal: scaleX(50), 
+    marginTop: scaleY(8), 
+    marginBottom: scaleY(10) 
+  },
+  reqGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  reqItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '48%', // Ensure 2 columns evenly
+    marginBottom: scaleY(4),
+    gap: 6
+  },
+  reqText: { 
+    color: '#E2E8F0', 
+    fontSize: scaleY(13), 
+    fontWeight: '600',
+    opacity: 0.8
+  },
+  reqMetText: {
+    color: '#10B981', // Green when met
+    opacity: 1
+  }
 });

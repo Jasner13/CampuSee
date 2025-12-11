@@ -5,8 +5,10 @@ import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'reac
 import { GRADIENTS, COLORS } from '../constants/colors';
 import { FONTS } from '../constants/fonts';
 
+// Define the types for navigation items
 type NavItem = 'home' | 'messages' | 'notifications' | 'profile';
 
+// Define the props interface
 interface BottomNavProps {
   selected: NavItem;
   onNavigate: (item: NavItem) => void;
@@ -18,8 +20,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({ selected, onNavigate, onCr
     <View style={styles.container}>
       <View style={styles.importantCircle} />
 
-      {/* HOME */}
-      <TouchableOpacity style={styles.navItem} onPress={() => onNavigate('home')} activeOpacity={0.7}>
+      {/* --- LEFT GROUP (Home + Messages) --- */}
+      
+      {/* 1. HOME TAB */}
+      <TouchableOpacity 
+        style={styles.navItem} 
+        onPress={() => onNavigate('home')} 
+        activeOpacity={0.7}
+      >
         {selected === 'home' ? (
           <>
             <Svg width="36" height="36" viewBox="0 0 36 36" fill="none">
@@ -34,8 +42,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ selected, onNavigate, onCr
                 </SvgLinearGradient>
               </Defs>
             </Svg>
-
-              <Text style={styles.selectedText}>Home</Text>
+            <Text style={styles.selectedText}>Home</Text>
           </>
         ) : (
           <>
@@ -50,8 +57,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({ selected, onNavigate, onCr
         )}
       </TouchableOpacity>
 
-      {/* MESSAGES */}
-      <TouchableOpacity style={styles.navItem} onPress={() => onNavigate('messages')} activeOpacity={0.7}>
+      {/* 2. MESSAGES TAB */}
+      <TouchableOpacity 
+        style={styles.navItem} 
+        onPress={() => onNavigate('messages')} 
+        activeOpacity={0.7}
+      >
         {selected === 'messages' ? (
           <>
             <Svg width="36" height="36" viewBox="0 0 36 36" fill="none">
@@ -69,8 +80,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ selected, onNavigate, onCr
                 </SvgLinearGradient>
               </Defs>
             </Svg>
-
-              <Text style={styles.selectedText}>Messages</Text>
+            <Text style={styles.selectedText}>Messages</Text>
           </>
         ) : (
           <>
@@ -88,9 +98,19 @@ export const BottomNav: React.FC<BottomNavProps> = ({ selected, onNavigate, onCr
         )}
       </TouchableOpacity>
 
-      {/* CREATE POST BUTTON */}
-      <TouchableOpacity style={styles.createButton} onPress={onCreatePost} activeOpacity={0.8}>
-        <LinearGradient colors={GRADIENTS.primary} style={styles.createButtonGradient}>
+      {/* --- MIDDLE SPACER --- */}
+      <View style={styles.spacer} />
+
+      {/* 3. CENTER CREATE BUTTON (Floating) */}
+      <TouchableOpacity 
+        style={styles.createButton} 
+        onPress={onCreatePost} 
+        activeOpacity={0.8}
+      >
+        <LinearGradient 
+          colors={GRADIENTS.primary} 
+          style={styles.createButtonGradient}
+        >
           <Svg width="32" height="32" viewBox="0 0 32 32" fill="none">
             <Path
               d="M24.0001 17.3307H17.3334V23.9974C17.3334 24.351 17.1929 24.6902 16.9429 24.9402C16.6928 25.1903 16.3537 25.3307 16.0001 25.3307C15.6465 25.3307 15.3073 25.1903 15.0573 24.9402C14.8072 24.6902 14.6667 24.351 14.6667 23.9974V17.3307H8.00008C7.64646 17.3307 7.30732 17.1903 7.05727 16.9402C6.80722 16.6902 6.66675 16.351 6.66675 15.9974C6.66675 15.6438 6.80722 15.3046 7.05727 15.0546C7.30732 14.8045 7.64646 14.6641 8.00008 14.6641H14.6667V7.9974C14.6667 7.64377 14.8072 7.30463 15.0573 7.05459C15.3073 6.80454 15.6465 6.66406 16.0001 6.66406C16.3537 6.66406 16.6928 6.80454 16.9429 7.05459C17.1929 7.30463 17.3334 7.64377 17.3334 7.9974V14.6641H24.0001C24.3537 14.6641 24.6928 14.8045 24.9429 15.0546C25.1929 15.3046 25.3334 15.6438 25.3334 15.9974C25.3334 16.351 25.1929 16.6902 24.9429 16.9402C24.6928 17.1903 24.3537 17.3307 24.0001 17.3307Z"
@@ -100,8 +120,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({ selected, onNavigate, onCr
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* NOTIFICATIONS */}
-      <TouchableOpacity style={styles.navItem} onPress={() => onNavigate('notifications')}>
+      {/* --- RIGHT GROUP (Notifications + Profile) --- */}
+
+      {/* 4. NOTIFICATIONS TAB */}
+      <TouchableOpacity 
+        style={styles.navItem} 
+        onPress={() => onNavigate('notifications')} 
+        activeOpacity={0.7}
+      >
         {selected === 'notifications' ? (
           <>
             <Svg width="36" height="36" viewBox="0 0 36 36" fill="none">
@@ -119,8 +145,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ selected, onNavigate, onCr
                 </SvgLinearGradient>
               </Defs>
             </Svg>
-
-              <Text style={styles.selectedText}>Notifications</Text>
+            <Text style={styles.selectedText}>Notifications</Text>
           </>
         ) : (
           <>
@@ -138,8 +163,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({ selected, onNavigate, onCr
         )}
       </TouchableOpacity>
 
-      {/* PROFILE */}
-      <TouchableOpacity style={styles.navItem} onPress={() => onNavigate('profile')}>
+      {/* 5. PROFILE TAB */}
+      <TouchableOpacity 
+        style={styles.navItem} 
+        onPress={() => onNavigate('profile')} 
+        activeOpacity={0.7}
+      >
         {selected === 'profile' ? (
           <>
             <Svg width="36" height="36" viewBox="0 0 36 36" fill="none">
@@ -154,8 +183,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ selected, onNavigate, onCr
                 </SvgLinearGradient>
               </Defs>
             </Svg>
-
-              <Text style={styles.selectedText}>Profile</Text>
+            <Text style={styles.selectedText}>Profile</Text>
           </>
         ) : (
           <>
@@ -173,9 +201,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({ selected, onNavigate, onCr
   );
 };
 
-/* ╔══════════════════════════════════════╗
-   ║                STYLES                ║
-   ╚══════════════════════════════════════╝ */
+export default BottomNav;
+
 const styles = StyleSheet.create({
   container: {
     width: '100%',
@@ -184,12 +211,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingTop: 14,
-    paddingHorizontal: 24,
+    paddingHorizontal: 0,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 8,
+  },
+  spacer: {
+    width: 70, // Gap for the center button
   },
   importantCircle: {
     position: 'absolute',
@@ -199,7 +229,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.backgroundLight,
     top: -40,
     left: '50%',
-    marginLeft: -20,
+    marginLeft: -44, // Centered (-88/2)
   },
   navItem: {
     flex: 1,
@@ -212,7 +242,7 @@ const styles = StyleSheet.create({
     height: 64,
     top: -29,
     left: '50%',
-    marginLeft: -32,
+    marginLeft: -32, // Centered (-64/2)
   },
   createButtonGradient: {
     width: 64,
@@ -220,10 +250,6 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 25,
-  },
-  gradientText: {
-    height: 16,
   },
   selectedText: {
     fontSize: FONTS.sizes.xs,
