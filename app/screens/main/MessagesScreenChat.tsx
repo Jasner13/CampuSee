@@ -55,6 +55,7 @@ export default function MessagesScreenChat() {
 
   useEffect(() => {
     fetchMessages();
+    markAsRead();
 
     const channel = supabase
       .channel(`chat:${peerId}`)
@@ -69,6 +70,7 @@ export default function MessagesScreenChat() {
         (payload) => {
           if (payload.new.sender_id === peerId) {
             setMessages((prev) => [...prev, payload.new as Message]);
+            markAsRead(); // Mark as read immediately if a new message pops in
           }
         }
       )
@@ -115,6 +117,21 @@ export default function MessagesScreenChat() {
       setSending(false);
     }
   };
+
+  const markAsRead = async () => {
+  if (!session?.user) return;
+
+  const { error } = await supabase
+    .from('messages')
+    .update({ is_read: true })
+    .eq('receiver_id', session.user.id) // Messages sent TO me
+    .eq('sender_id', peerId)          // Messages FROM this specific friend
+    .eq('is_read', false);            // Only update if currently unread
+
+  if (error) {
+    console.error('Error marking messages as read:', error);
+  }
+};
 
   const formatTime = (isoString: string) => {
     return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

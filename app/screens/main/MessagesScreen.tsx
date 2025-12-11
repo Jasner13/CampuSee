@@ -143,16 +143,17 @@ export default function MessagesScreen() {
     });
   };
 
-  // --- Lifecycle & Realtime ---
   useEffect(() => {
     fetchConversations();
     const channel = supabase
       .channel('public:messages')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
+        { event: '*', schema: 'public', table: 'messages' },
         (payload) => {
-          if (payload.new.sender_id === session?.user.id || payload.new.receiver_id === session?.user.id) {
+          const changedRecord = payload.new as any; 
+
+          if (changedRecord && (changedRecord.sender_id === session?.user.id || changedRecord.receiver_id === session?.user.id)) {
             fetchConversations();
           }
         }
