@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/types';
@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Avatar } from '../../components/Avatar';
 import { Message } from '../../types';
+import { Ionicons } from '@expo/vector-icons';
 
 type MessagesScreenChatNavigationProp = NativeStackNavigationProp<RootStackParamList, 'MessagesChat'>;
 type MessagesScreenChatRouteProp = RouteProp<RootStackParamList, 'MessagesChat'>;
@@ -134,8 +135,103 @@ export default function MessagesScreenChat() {
     }
   };
 
+  const handlePostPress = async (postId: string) => {
+    if (!postId) {
+        Alert.alert("Error", "Invalid post link.");
+        return;
+    }
+
+    try {
+        // Fetch the full post details to navigate to PostDetailScreen
+        // FIXED: Added '!posts_user_id_fkey' to resolve ambiguous relationship error
+        const { data: postData, error } = await supabase
+            .from('posts')
+            .select(`
+                *,
+                profiles!posts_user_id_fkey (full_name, avatar_url, program)
+            `)
+            .eq('id', postId)
+            .single();
+        
+        if (error || !postData) {
+            console.log("Fetch error or no data:", error);
+            Alert.alert("Unavailable", "This post is unavailable or has been deleted.");
+            return;
+        }
+
+        // Format data for the screen params
+        const formattedPost = {
+            id: postData.id,
+            userId: postData.user_id,
+            authorName: postData.profiles?.full_name || 'Unknown',
+            authorInitials: postData.profiles?.full_name 
+                ? postData.profiles.full_name.split(' ').map((n:string) => n[0]).join('').substring(0,2).toUpperCase() 
+                : '??',
+            authorAvatarUrl: postData.profiles?.avatar_url,
+            timestamp: new Date(postData.created_at).toLocaleDateString(),
+            label: postData.profiles?.program || 'Student', 
+            title: postData.title,
+            description: postData.description,
+            category: postData.category,
+            fileUrl: postData.file_url,
+        };
+
+        // Navigate
+        // @ts-ignore
+        navigation.navigate('PostDetails', { post: formattedPost });
+
+    } catch (err) {
+        console.error(err);
+        Alert.alert("Error", "Could not open the post.");
+    }
+  };
+
   const formatTime = (isoString: string) => {
     return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const renderMessageContent = (content: string, isSentByMe: boolean) => {
+      try {
+          // Attempt to parse JSON content for shared posts
+          if (content && content.trim().startsWith('{')) {
+              const parsed = JSON.parse(content);
+              if (parsed.type === 'share_post') {
+                  return (
+                      <TouchableOpacity 
+                        style={styles.sharedPostContainer}
+                        onPress={() => handlePostPress(parsed.postId)}
+                        activeOpacity={0.9}
+                      >
+                          <View style={styles.sharedPostHeader}>
+                              <Ionicons name="share-social" size={16} color={isSentByMe ? '#FFF' : COLORS.primary} />
+                              <Text style={[styles.sharedPostLabel, isSentByMe ? {color:'#FFF'} : {color: COLORS.primary}]}>
+                                  Shared a Post
+                              </Text>
+                          </View>
+                          <View style={styles.sharedPostCard}>
+                              <Text numberOfLines={1} style={styles.sharedPostTitle}>{parsed.title}</Text>
+                              <Text numberOfLines={2} style={styles.sharedPostDesc}>{parsed.description}</Text>
+                              <View style={styles.sharedPostFooter}>
+                                  <Text style={styles.sharedPostCta}>Tap to view</Text>
+                              </View>
+                          </View>
+                      </TouchableOpacity>
+                  );
+              }
+          }
+      } catch (e) {
+          // Not JSON, fall through to regular text
+      }
+
+      // Regular text message
+      return (
+        <Text style={[
+            styles.messageText,
+            isSentByMe ? styles.messageTextSent : styles.messageTextReceived
+          ]}>
+            {content}
+          </Text>
+      );
   };
 
   return (
@@ -160,8 +256,6 @@ export default function MessagesScreenChat() {
               avatarUrl={peerAvatarUrl} 
               size="default" 
             />
-            {/* Note: Real "Online Status" requires Supabase Presence (Advanced feature). 
-                Keeping the badge static or hidden for now is fine. */}
             <View style={styles.onlineBadge} />
           </View>
           <View style={styles.headerTextContainer}>
@@ -185,7 +279,6 @@ export default function MessagesScreenChat() {
           {messages.map((message, index) => {
             const isSentByMe = message.sender_id === session?.user?.id;
 
-            // Logic to group messages by time/sender to avoid repeating timestamps
             const showTimestamp = index === 0 ||
               new Date(messages[index - 1].created_at).getMinutes() !== new Date(message.created_at).getMinutes() ||
               messages[index - 1].sender_id !== message.sender_id;
@@ -196,12 +289,7 @@ export default function MessagesScreenChat() {
                   styles.messageBubble,
                   isSentByMe ? styles.messageBubbleSent : styles.messageBubbleReceived
                 ]}>
-                  <Text style={[
-                    styles.messageText,
-                    isSentByMe ? styles.messageTextSent : styles.messageTextReceived
-                  ]}>
-                    {message.content}
-                  </Text>
+                  {renderMessageContent(message.content, isSentByMe)}
                 </View>
                 {showTimestamp && (
                   <Text style={[
@@ -381,4 +469,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: 8,
   },
+  // Shared Post Styles
+  sharedPostContainer: {
+      minWidth: 200,
+  },
+  sharedPostHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 8,
+  },
+  sharedPostLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      marginLeft: 6,
+  },
+  sharedPostCard: {
+      backgroundColor: 'rgba(255,255,255,0.95)',
+      borderRadius: 12,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: 'rgba(0,0,0,0.05)',
+  },
+  sharedPostTitle: {
+      fontSize: 14,
+      fontWeight: 'bold',
+      color: '#1A1B2D',
+      marginBottom: 4,
+  },
+  sharedPostDesc: {
+      fontSize: 12,
+      color: '#64748B',
+      marginBottom: 8,
+  },
+  sharedPostFooter: {
+      alignItems: 'flex-end',
+  },
+  sharedPostCta: {
+      fontSize: 10,
+      color: COLORS.primary,
+      fontWeight: '600',
+  }
 });

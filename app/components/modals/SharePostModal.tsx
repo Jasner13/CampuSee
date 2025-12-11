@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, FlatList, Image, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, FlatList, Image, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
@@ -50,7 +50,16 @@ export const SharePostModal: React.FC<SharePostModalProps> = ({ visible, onClose
 
   const handleSend = async (receiverId: string) => {
     try {
-        const content = `Shared a post: "${post.title}"\nCheck it out!`;
+        // Create a structured payload for the message
+        const messagePayload = {
+            type: 'share_post',
+            postId: post.id,
+            title: post.title,
+            description: post.description,
+            thumbnail: post.fileUrl // Optional: if you want to show a preview image
+        };
+
+        const content = JSON.stringify(messagePayload);
         
         // 1. Insert Message
         const { error } = await supabase.from('messages').insert({
