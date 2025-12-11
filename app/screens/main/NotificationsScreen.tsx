@@ -7,20 +7,9 @@ import { BottomNav } from '../../components/BottomNav';
 import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { Notification } from '../../types';
 
 type NotificationsScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Notifications'>;
-
-interface Notification {
-  id: string;
-  type: 'like' | 'comment' | 'follow' | 'event' | 'announcement';
-  created_at: string;
-  title: string | null;
-  content: string | null;
-  is_read: boolean;
-  actor?: {
-    full_name: string | null;
-  };
-}
 
 export default function NotificationsScreen() {
   const navigation = useNavigation<NotificationsScreenNavigationProp>();
@@ -59,7 +48,7 @@ export default function NotificationsScreen() {
         .from('notifications')
         .select(`
           *,
-          actor:actor_id (full_name)
+          actor:actor_id (full_name, avatar_url)
         `)
         .order('created_at', { ascending: false });
 
@@ -77,14 +66,16 @@ export default function NotificationsScreen() {
     useCallback(() => {
       fetchNotifications();
 
-      // Optional: Realtime Subscription could go here similar to Messages
       const channel = supabase
         .channel('public:notifications')
         .on(
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${session?.user.id}` },
           (payload) => {
-            setNotifications(prev => [payload.new as Notification, ...prev]);
+            // Note: Realtime payload usually doesn't have joins (actor name).
+            // A simple refresh is often safer, or just append raw data.
+            // For now, we'll fetch fresh data to get the actor name.
+            fetchNotifications();
           }
         )
         .subscribe();
@@ -110,7 +101,7 @@ export default function NotificationsScreen() {
       setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
       await supabase.from('notifications').update({ is_read: true }).eq('id', notification.id);
     }
-    // Future: Navigate based on type (e.g. to PostDetails)
+    // Future: Navigate based on type
     console.log('Pressed notification:', notification.id);
   };
 

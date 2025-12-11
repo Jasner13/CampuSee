@@ -1,6 +1,5 @@
 // app/types/index.ts
 
-// 1. Database Row Types
 export interface Profile {
     id: string;
     email: string | null;
@@ -12,6 +11,7 @@ export interface Profile {
         replies_to_posts?: boolean;
         new_messages?: boolean;
         post_interactions?: boolean;
+        [key: string]: any;
     } | null;
     updated_at: string | null;
 }
@@ -25,16 +25,23 @@ export interface Message {
     is_read: boolean;
 }
 
-export interface Comment {
+export type NotificationType = 'like' | 'comment' | 'follow' | 'event' | 'announcement';
+
+export interface Notification {
     id: string;
     created_at: string;
-    content: string;
     user_id: string;
-    post_id: string;
-    profiles?: Profile; // Joined data
+    actor_id: string | null;
+    type: NotificationType;
+    title: string | null;
+    content: string | null;
+    is_read: boolean;
+    actor?: {
+        full_name: string | null;
+        avatar_url: string | null;
+    };
 }
 
-// 2. View Types
 export interface ConversationView {
     peer_id: string;
     last_message: string;
@@ -44,4 +51,25 @@ export interface ConversationView {
     receiver_id: string;
     peer_name: string | null;
     peer_avatar: string | null;
+}
+
+export interface Post {
+    id: string;
+    created_at: string;
+    user_id: string;
+    title: string;
+    description: string;
+    category: string;
+    file_url: string | null;
+    file_type: string | null;
+    profiles?: Profile;
+}
+
+export interface Comment {
+    id: string;
+    created_at: string;
+    content: string;
+    user_id: string;
+    post_id: string;
+    profiles?: Profile;
 }

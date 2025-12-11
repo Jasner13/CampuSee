@@ -12,41 +12,27 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Avatar } from '../../components/Avatar';
+// IMPORT TYPES FROM CENTRAL SOURCE
+import { ConversationView, Profile } from '../../types';
 
 type MessagesScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Messages'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
 
-interface Conversation {
-  peer_id: string;
-  peer_name: string | null;
-  peer_avatar: string | null;
-  last_message: string;
-  time: string;
-  is_read: boolean;
-  sender_id: string;
-  receiver_id: string;
-}
-
-interface UserProfile {
-  id: string;
-  full_name: string | null;
-  avatar_url: string | null;
-  program: string | null;
-}
-
 export default function MessagesScreen() {
   const navigation = useNavigation<MessagesScreenNavigationProp>();
   const { session } = useAuth();
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  // Use imported ConversationView type
+  const [conversations, setConversations] = useState<ConversationView[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Search State
   const [isSearching, setIsSearching] = useState(false);
   const [searchText, setSearchText] = useState('');
-  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+  // Use imported Profile type
+  const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [isSearchingLoading, setIsSearchingLoading] = useState(false);
 
   const handleNavigate = (item: 'home' | 'messages' | 'notifications' | 'profile') => {
@@ -95,7 +81,7 @@ export default function MessagesScreen() {
         .order('time', { ascending: false });
 
       if (error) throw error;
-      if (data) setConversations(data as Conversation[]);
+      if (data) setConversations(data as ConversationView[]);
     } catch (error) {
       console.error('Error fetching chats:', error);
     } finally {
@@ -116,7 +102,7 @@ export default function MessagesScreen() {
       // Search profiles by name
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, avatar_url, program')
+        .select('*')
         .neq('id', session?.user.id) // Don't show myself
         .ilike('full_name', `%${text}%`)
         .limit(10);
