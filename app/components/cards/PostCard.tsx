@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Avatar } from '../Avatar';
+import { CategoryBadge } from '../CategoryBadge';
 import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { supabase } from '../../lib/supabase';
@@ -48,18 +49,6 @@ const REACTIONS = [
 
 type ReactionType = typeof REACTIONS[number]['id'] | null;
 
-const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
-  study:  { bg: '#E6F7F5', text: '#00BFA5' },
-  items:  { bg: '#FFF7ED', text: '#F59E0B' },
-  events: { bg: '#FDF2F8', text: '#DB2777' },
-  favors: { bg: '#EFF6FF', text: '#2563EB' },
-  default:{ bg: '#F1F5F9', text: '#64748B' },
-};
-
-const getCategoryStyle = (category: string = 'default') => {
-  return CATEGORY_COLORS[category.toLowerCase()] || CATEGORY_COLORS.default;
-};
-
 export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
   const { session } = useAuth();
   const currentUserId = session?.user?.id;
@@ -77,7 +66,6 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
 
   const hasAttachment = !!post.fileUrl;
   const isImage = post.fileUrl ? /\.(jpg|jpeg|png|gif|webp)$/i.test(post.fileUrl) : false;
-  const categoryStyle = getCategoryStyle(post.category);
 
   // Sync state to ref
   useEffect(() => {
@@ -298,11 +286,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
             <Text style={styles.timestamp}>{post.timestamp}</Text>
           </View>
           
-          <View style={[styles.categoryBadge, { backgroundColor: categoryStyle.bg }]}>
-              <Text style={[styles.categoryText, { color: categoryStyle.text }]}>
-                {post.label}
-              </Text>
-          </View>
+          <CategoryBadge category={post.category || 'default'} />
         </View>
 
         <View style={styles.content}>
@@ -409,17 +393,6 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.xs,
     color: COLORS.textTertiary,
     fontWeight: '500',
-  },
-  categoryBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  categoryText: {
-    fontWeight: '700',
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   content: {
     marginBottom: 14,
