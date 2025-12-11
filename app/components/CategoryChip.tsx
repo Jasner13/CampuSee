@@ -135,6 +135,40 @@ const CategoryIcon: React.FC<{ type: CategoryType }> = ({ type }) => {
     );
   }
 
+  // ADDED: Briefcase Icon for 'favors' (Professional representation of services/tasks)
+  if (type === 'favors') {
+    return (
+      <Svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+         {/* Handle */}
+        <Path
+          d="M6 5.25V3.75C6 2.92157 6.67157 2.25 7.5 2.25H10.5C11.3284 2.25 12 2.92157 12 3.75V5.25"
+          stroke="url(#paint0_linear_favors)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {/* Body */}
+        <Path
+          d="M2.25 5.25H15.75C16.5784 5.25 17.25 5.92157 17.25 6.75V14.25C17.25 15.0784 16.5784 15.75 15.75 15.75H2.25C1.42157 15.75 0.75 15.0784 0.75 14.25V6.75C0.75 5.92157 1.42157 5.25 2.25 5.25Z"
+          stroke="url(#paint1_linear_favors)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <Defs>
+          <SvgLinearGradient id="paint0_linear_favors" x1="9" y1="2.25" x2="9" y2="5.25">
+            <Stop stopColor="#667EEA" />
+            <Stop offset="1" stopColor="#764BA2" />
+          </SvgLinearGradient>
+          <SvgLinearGradient id="paint1_linear_favors" x1="9" y1="5.25" x2="9" y2="15.75">
+            <Stop stopColor="#667EEA" />
+            <Stop offset="1" stopColor="#764BA2" />
+          </SvgLinearGradient>
+        </Defs>
+      </Svg>
+    );
+  }
+
   return null;
 };
 
@@ -142,7 +176,14 @@ export const CategoryChip: React.FC<CategoryChipProps> = ({ type, label, isSelec
   if (isSelected) {
     return (
       <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
-        <LinearGradient colors={GRADIENTS.primary} start={{ x: 0, y: 0 }} end={{ x: 0.233, y: 1.155 }} style={styles.selectedContainer}>
+        <LinearGradient 
+          colors={GRADIENTS.primary} 
+          start={{ x: 0, y: 0 }} 
+          end={{ x: 0.233, y: 1.155 }} 
+          style={styles.selectedContainer}
+        >
+          {/* FIX 1: Add the icon here so the layout size includes it */}
+          <CategoryIcon type={type} />
           <Text style={styles.selectedText}>{label}</Text>
         </LinearGradient>
       </TouchableOpacity>
@@ -165,6 +206,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    // FIX 2: Add a transparent border to match the unselected state's dimensions
+    borderWidth: 2,
+    borderColor: 'transparent', 
   },
   selectedText: {
     color: COLORS.textLight,
