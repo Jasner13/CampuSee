@@ -63,6 +63,10 @@ export interface Post {
     file_url: string | null;
     file_type: string | null;
     profiles?: Profile;
+    // Added counts for UI
+    likes_count?: number;
+    comments_count?: number;
+    user_reaction?: string | null; // The current user's reaction
 }
 
 export interface Comment {

@@ -6,7 +6,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 import { BottomNav } from '../../components/BottomNav';
-import { PostCard, Post } from '../../components/cards/PostCard'; // UI Post Type
+import { PostCard, Post } from '../../components/cards/PostCard';
 import { GRADIENTS, COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -46,6 +46,10 @@ export default function ProfileScreen() {
   const [savedPosts, setSavedPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(false);
 
+  // New states for followers
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
@@ -74,6 +78,25 @@ export default function ProfileScreen() {
             derivedInitials = derivedName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase();
             setInitials(derivedInitials);
           }
+
+          // Fetch Followers/Following Counts
+          // Followers: People where following_id = me
+          const { count: followers } = await supabase
+            .from('follows')
+            .select('*', { count: 'exact', head: true })
+            .eq('following_id', session.user.id);
+            
+          // Following: People where follower_id = me
+          const { count: following } = await supabase
+            .from('follows')
+            .select('*', { count: 'exact', head: true })
+            .eq('follower_id', session.user.id);
+          
+          if (isActive) {
+              setFollowersCount(followers || 0);
+              setFollowingCount(following || 0);
+          }
+
         } catch (err) {
           console.error('Profile fetch error:', err);
         } finally {
@@ -83,10 +106,10 @@ export default function ProfileScreen() {
         if (isActive) setLoadingPosts(true);
         
         try {
-          // Fetch My Posts
+          // Fetch My Posts with counts
           const { data: postsData, error: postsError } = await supabase
             .from('posts')
-            .select('*')
+            .select('*, post_likes(count), comments(count)')
             .eq('user_id', session.user.id)
             .order('created_at', { ascending: false });
           
@@ -104,7 +127,9 @@ export default function ProfileScreen() {
                 title: item.title,
                 description: item.description,
                 category: item.category,
-                fileUrl: item.file_url
+                fileUrl: item.file_url,
+                likesCount: item.post_likes?.[0]?.count || 0,
+                commentsCount: item.comments?.[0]?.count || 0,
              }));
              setMyPosts(formattedPosts);
           }
@@ -114,17 +139,10 @@ export default function ProfileScreen() {
             .from('saved_posts')
             .select(`
                 post:posts!inner (
-                    id, 
-                    title, 
-                    description, 
-                    category, 
-                    created_at, 
-                    file_url,
-                    user_id,
-                    profiles:profiles!posts_user_id_fkey (
-                        full_name,
-                        avatar_url
-                    )
+                    id, title, description, category, created_at, file_url, user_id,
+                    profiles:profiles!posts_user_id_fkey (full_name, avatar_url),
+                    post_likes(count),
+                    comments(count)
                 )
             `)
             .eq('user_id', session.user.id)
@@ -149,7 +167,9 @@ export default function ProfileScreen() {
                         title: post.title,
                         description: post.description,
                         category: post.category,
-                        fileUrl: post.file_url
+                        fileUrl: post.file_url,
+                        likesCount: post.post_likes?.[0]?.count || 0,
+                        commentsCount: post.comments?.[0]?.count || 0,
                     };
                 });
                 setSavedPosts(formattedSaved);
@@ -250,12 +270,17 @@ export default function ProfileScreen() {
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>{myPosts.length}</Text>
-              <Text style={styles.statLabel}>POSTS CREATED</Text>
+              <Text style={styles.statLabel}>POSTS</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{savedPosts.length}</Text>
-              <Text style={styles.statLabel}>SAVED POSTS</Text>
+              <Text style={styles.statNumber}>{followersCount}</Text>
+              <Text style={styles.statLabel}>FOLLOWERS</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{followingCount}</Text>
+              <Text style={styles.statLabel}>FOLLOWING</Text>
             </View>
           </View>
         </View>

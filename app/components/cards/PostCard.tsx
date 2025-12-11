@@ -31,11 +31,16 @@ export interface Post {
   description: string;
   category?: string;
   fileUrl?: string | null;
+  // New Fields for stats
+  likesCount?: number;
+  commentsCount?: number;
 }
 
 interface PostCardProps {
   post: Post;
   onPress?: () => void;
+  onProfilePress?: (userId: string) => void;
+  onSharePress?: (post: Post) => void;
 }
 
 const REACTIONS = [
@@ -49,13 +54,13 @@ const REACTIONS = [
 
 type ReactionType = typeof REACTIONS[number]['id'] | null;
 
-export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
+export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePress, onSharePress }) => {
   const { session } = useAuth();
   const currentUserId = session?.user?.id;
 
   const [currentReaction, setCurrentReaction] = useState<ReactionType>(null);
+  const [likesCount, setLikesCount] = useState(post.likesCount || 0);
   
-  // 1. Ref to track current reaction in PanResponder (Fixes Stale Closure)
   const currentReactionRef = useRef<ReactionType>(null);
 
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -67,7 +72,6 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
   const hasAttachment = !!post.fileUrl;
   const isImage = post.fileUrl ? /\.(jpg|jpeg|png|gif|webp)$/i.test(post.fileUrl) : false;
 
-  // Sync state to ref
   useEffect(() => {
     currentReactionRef.current = currentReaction;
   }, [currentReaction]);
@@ -75,6 +79,11 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
   useEffect(() => {
     fetchCurrentReaction();
   }, [post.id, currentUserId]);
+
+  // If prop updates from parent refresh, sync the count
+  useEffect(() => {
+    setLikesCount(post.likesCount || 0);
+  }, [post.likesCount]);
 
   const fetchCurrentReaction = async () => {
     if (!currentUserId) return;
@@ -92,7 +101,6 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
       if (data && data.reaction_type) {
         setCurrentReaction(data.reaction_type as ReactionType);
       } else if (data) {
-        // Fallback for old likes without type
         setCurrentReaction('like');
       } else {
         setCurrentReaction(null);
@@ -105,26 +113,28 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
   const handleSetReaction = async (reactionId: ReactionType) => {
     if (!currentUserId) return;
     
-    // 2. Use Ref for logic to ensure we are toggling against the LATEST state
     const previous = currentReactionRef.current;
     const newReaction = previous === reactionId ? null : reactionId;
     
     // Optimistic Update
     setCurrentReaction(newReaction);
     
-    // NOTE: We do NOT close the picker here automatically anymore. 
-    // This allows the PanResponder release animation to handle the UI update smoothly.
+    // Update Count Optimistically
+    if (previous === null && newReaction !== null) {
+        setLikesCount(c => c + 1);
+    } else if (previous !== null && newReaction === null) {
+        setLikesCount(c => (c > 0 ? c - 1 : 0));
+    }
+    // If changing from one reaction to another, count stays same
 
     try {
         if (!newReaction) {
-            // Delete
             await supabase
               .from('post_likes')
               .delete()
               .eq('post_id', post.id)
               .eq('user_id', currentUserId);
         } else {
-            // Upsert
             await supabase
               .from('post_likes')
               .upsert({
@@ -135,12 +145,14 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
         }
     } catch (error) {
       console.error('Reaction error:', error);
-      setCurrentReaction(previous); // Revert
+      setCurrentReaction(previous);
+      // Revert count if error
+      if (previous === null && newReaction !== null) setLikesCount(c => c - 1);
+      else if (previous !== null && newReaction === null) setLikesCount(c => c + 1);
     }
   };
 
-  // --- PanResponder Logic ---
-
+  // --- PanResponder Logic (Simplified for brevity, same as before) ---
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const isDragging = useRef(false);
   const hasMoved = useRef(false);
@@ -176,11 +188,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
         }
 
         if (isDragging.current) {
-          // Adjust logic for better hit testing
           const REACTION_WIDTH = 44;
           const currentX = gestureState.dx; 
-          
-          // Offset by ~20px to start selection from the first emoji when dragging starts
           let index = Math.floor((currentX + 20) / REACTION_WIDTH);
           
           if (index < 0) index = 0;
@@ -197,7 +206,6 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
             return index;
           });
         } else {
-            // Cancel long press if user moves finger before timer fires (scroll intent)
             if (Math.abs(gestureState.dx) > 10 || Math.abs(gestureState.dy) > 10) {
                 if (longPressTimer.current) clearTimeout(longPressTimer.current);
             }
@@ -208,16 +216,13 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
         if (longPressTimer.current) clearTimeout(longPressTimer.current);
 
         if (isDragging.current && isPickerOpen) {
-          // Case 1: Dragged and Released -> Select hovered reaction
           if (hoveredReactionIndex !== null) {
             handleSetReaction(REACTIONS[hoveredReactionIndex].id);
           }
           closePicker();
         } else if (!hasMoved.current && !isPickerOpen) {
-          // Case 2: Simple Tap -> Toggle Like (using default 'like' or removing)
           handleSetReaction('like');
         } else {
-          // Case 3: Dragged but not enough to trigger picker, or just cancelling
           closePicker(); 
         }
         
@@ -233,8 +238,6 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
       }
     })
   ).current;
-
-  // --- Render Helpers ---
 
   const getActiveReactionDisplay = () => {
     if (!currentReaction) {
@@ -256,14 +259,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
           emoji: r.emoji
         };
     }
-    // Fallback
-    return { 
-      type: 'icon',
-      name: 'thumbs-up', 
-      color: COLORS.primary, 
-      label: 'Liked',
-      emoji: null
-    };
+    return { type: 'icon', name: 'thumbs-up', color: COLORS.primary, label: 'Liked', emoji: null };
   };
 
   const active = getActiveReactionDisplay();
@@ -276,13 +272,17 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
           style={styles.cardInner}
       >
         <View style={styles.header}>
-          <Avatar 
-            initials={post.authorInitials} 
-            avatarUrl={post.authorAvatarUrl} 
-            size="small"
-          />
+          <TouchableOpacity onPress={() => onProfilePress && onProfilePress(post.userId)}>
+            <Avatar 
+                initials={post.authorInitials} 
+                avatarUrl={post.authorAvatarUrl} 
+                size="small"
+            />
+          </TouchableOpacity>
           <View style={styles.headerText}>
-            <Text style={styles.authorName} numberOfLines={1}>{post.authorName}</Text>
+            <TouchableOpacity onPress={() => onProfilePress && onProfilePress(post.userId)}>
+                <Text style={styles.authorName} numberOfLines={1}>{post.authorName}</Text>
+            </TouchableOpacity>
             <Text style={styles.timestamp}>{post.timestamp}</Text>
           </View>
           
@@ -311,6 +311,20 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
               </Text>
           </View>
         )}
+        
+        {/* Stats Row */}
+        <View style={styles.statsRow}>
+            <View style={styles.statsLeft}>
+                {likesCount > 0 && (
+                    <Text style={styles.statsText}>{likesCount} Reactions</Text>
+                )}
+            </View>
+            <View style={styles.statsRight}>
+                {post.commentsCount !== undefined && post.commentsCount > 0 && (
+                    <Text style={styles.statsText}>{post.commentsCount} Comments</Text>
+                )}
+            </View>
+        </View>
 
         <View style={styles.divider} />
 
@@ -345,7 +359,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress }) => {
                 <Text style={styles.actionText}>Comment</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity style={styles.actionButton} onPress={() => onSharePress && onSharePress(post)}>
                 <Ionicons name="share-social-outline" size={20} color={COLORS.textTertiary} />
                 <Text style={styles.actionText}>Share</Text>
             </TouchableOpacity>
@@ -433,6 +447,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.textSecondary,
   },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  statsLeft: {},
+  statsRight: {},
+  statsText: {
+    fontSize: 12,
+    color: COLORS.textTertiary,
+  },
   divider: {
     height: 1,
     backgroundColor: '#F1F5F9',
@@ -447,7 +473,6 @@ const styles = StyleSheet.create({
   },
   actionButtonWrapper: {
      zIndex: 30,
-     // Ensure touch area is sufficient
      minWidth: 60, 
      alignItems: 'center',
   },
@@ -466,7 +491,7 @@ const styles = StyleSheet.create({
   reactionPicker: {
     position: 'absolute',
     bottom: 50,
-    left: -10, // Slight offset to align with thumb position better
+    left: -10,
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     borderRadius: 30,
