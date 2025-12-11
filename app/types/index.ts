@@ -66,7 +66,6 @@ export interface Post {
     // Added counts for UI
     likes_count?: number;
     comments_count?: number;
-    user_reaction?: string | null; // The current user's reaction
 }
 
 export interface Comment {

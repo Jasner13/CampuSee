@@ -1,14 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
   StyleSheet, 
   TouchableOpacity, 
-  Animated,
-  PanResponder,
   Vibration,
-  GestureResponderEvent,
-  PanResponderGestureState,
   Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,7 +27,6 @@ export interface Post {
   description: string;
   category?: string;
   fileUrl?: string | null;
-  // New Fields for stats
   likesCount?: number;
   commentsCount?: number;
 }
@@ -43,226 +38,102 @@ interface PostCardProps {
   onSharePress?: (post: Post) => void;
 }
 
-const REACTIONS = [
-  { id: 'like',  emoji: '👍', label: 'Like',  color: '#3B82F6' },
-  { id: 'love',  emoji: '❤️', label: 'Love',  color: '#EF4444' },
-  { id: 'haha',  emoji: '😆', label: 'Haha',  color: '#F59E0B' },
-  { id: 'wow',   emoji: '😮', label: 'Wow',   color: '#F59E0B' },
-  { id: 'sad',   emoji: '😢', label: 'Sad',   color: '#F59E0B' },
-  { id: 'angry', emoji: '😡', label: 'Angry', color: '#EF4444' },
-] as const;
-
-type ReactionType = typeof REACTIONS[number]['id'] | null;
-
 export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePress, onSharePress }) => {
   const { session } = useAuth();
   const currentUserId = session?.user?.id;
 
-  const [currentReaction, setCurrentReaction] = useState<ReactionType>(null);
+  const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likesCount || 0);
-  
-  const currentReactionRef = useRef<ReactionType>(null);
-
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [hoveredReactionIndex, setHoveredReactionIndex] = useState<number | null>(null);
-
-  const pickerScale = useRef(new Animated.Value(0)).current;
-  const hoverScales = useRef(REACTIONS.map(() => new Animated.Value(1))).current;
 
   const hasAttachment = !!post.fileUrl;
   const isImage = post.fileUrl ? /\.(jpg|jpeg|png|gif|webp)$/i.test(post.fileUrl) : false;
 
   useEffect(() => {
-    currentReactionRef.current = currentReaction;
-  }, [currentReaction]);
-
-  useEffect(() => {
-    fetchCurrentReaction();
+    fetchLikeStatus();
   }, [post.id, currentUserId]);
 
-  // If prop updates from parent refresh, sync the count
+  // Sync count if parent updates
   useEffect(() => {
     setLikesCount(post.likesCount || 0);
   }, [post.likesCount]);
 
-  const fetchCurrentReaction = async () => {
+  const fetchLikeStatus = async () => {
     if (!currentUserId) return;
     
     try {
       const { data, error } = await supabase
         .from('post_likes')
-        .select('reaction_type')
+        .select('post_id')
         .eq('post_id', post.id)
         .eq('user_id', currentUserId)
         .maybeSingle();
 
-      if (error) throw error;
-      
-      if (data && data.reaction_type) {
-        setCurrentReaction(data.reaction_type as ReactionType);
-      } else if (data) {
-        setCurrentReaction('like');
-      } else {
-        setCurrentReaction(null);
+      if (error && error.code !== 'PGRST116') {
+         console.error('Error fetching like status:', error);
+         return;
       }
+      
+      setIsLiked(!!data);
     } catch (error) {
-      console.error('Error fetching reaction:', error);
+      console.error('Error in fetchLikeStatus:', error);
     }
   };
 
-  const handleSetReaction = async (reactionId: ReactionType) => {
+  const handleLike = async () => {
     if (!currentUserId) return;
     
-    const previous = currentReactionRef.current;
-    const newReaction = previous === reactionId ? null : reactionId;
-    
     // Optimistic Update
-    setCurrentReaction(newReaction);
+    const previousState = isLiked;
+    const previousCount = likesCount;
     
-    // Update Count Optimistically
-    if (previous === null && newReaction !== null) {
-        setLikesCount(c => c + 1);
-    } else if (previous !== null && newReaction === null) {
-        setLikesCount(c => (c > 0 ? c - 1 : 0));
+    setIsLiked(!isLiked);
+    setLikesCount(prev => isLiked ? prev - 1 : prev + 1);
+    
+    if (Platform.OS === 'ios') {
+        Vibration.vibrate(10); // Subtle haptic feedback
     }
-    // If changing from one reaction to another, count stays same
 
     try {
-        if (!newReaction) {
-            await supabase
-              .from('post_likes')
-              .delete()
-              .eq('post_id', post.id)
-              .eq('user_id', currentUserId);
-        } else {
-            await supabase
-              .from('post_likes')
-              .upsert({
-                post_id: post.id,
-                user_id: currentUserId,
-                reaction_type: newReaction,
-              }, { onConflict: 'user_id, post_id' });
-        }
-    } catch (error) {
-      console.error('Reaction error:', error);
-      setCurrentReaction(previous);
-      // Revert count if error
-      if (previous === null && newReaction !== null) setLikesCount(c => c - 1);
-      else if (previous !== null && newReaction === null) setLikesCount(c => c + 1);
-    }
-  };
-
-  // --- PanResponder Logic (Simplified for brevity, same as before) ---
-  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
-  const isDragging = useRef(false);
-  const hasMoved = useRef(false);
-
-  const closePicker = () => {
-    Animated.timing(pickerScale, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
-      setIsPickerOpen(false);
-      setHoveredReactionIndex(null);
-      hoverScales.forEach(scale => scale.setValue(1));
-    });
-  };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderTerminationRequest: () => !isPickerOpen,
-
-      onPanResponderGrant: () => {
-        isDragging.current = false;
-        hasMoved.current = false;
-        longPressTimer.current = setTimeout(() => {
-          setIsPickerOpen(true);
-          isDragging.current = true;
-          Vibration.vibrate(50);
-          Animated.spring(pickerScale, { toValue: 1, useNativeDriver: true }).start();
-        }, 300);
-      },
-
-      onPanResponderMove: (evt: GestureResponderEvent, gestureState: PanResponderGestureState) => {
-        if (Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5) {
-          hasMoved.current = true;
-        }
-
-        if (isDragging.current) {
-          const REACTION_WIDTH = 44;
-          const currentX = gestureState.dx; 
-          let index = Math.floor((currentX + 20) / REACTION_WIDTH);
+      if (previousState) {
+        // Unlike
+        const { error } = await supabase
+          .from('post_likes')
+          .delete()
+          .eq('post_id', post.id)
+          .eq('user_id', currentUserId);
           
-          if (index < 0) index = 0;
-          if (index >= REACTIONS.length) index = REACTIONS.length - 1;
-
-          setHoveredReactionIndex((prev) => {
-            if (prev !== index) {
-                Animated.spring(hoverScales[index], { toValue: 1.5, useNativeDriver: true }).start();
-                if (prev !== null) {
-                    Animated.spring(hoverScales[prev], { toValue: 1, useNativeDriver: true }).start();
-                }
-                if (Platform.OS === 'ios') Vibration.vibrate(10); 
-            }
-            return index;
+        if (error) throw error;
+      } else {
+        // Like
+        const { error } = await supabase
+          .from('post_likes')
+          .insert({
+            post_id: post.id,
+            user_id: currentUserId,
           });
-        } else {
-            if (Math.abs(gestureState.dx) > 10 || Math.abs(gestureState.dy) > 10) {
-                if (longPressTimer.current) clearTimeout(longPressTimer.current);
-            }
-        }
-      },
 
-      onPanResponderRelease: () => {
-        if (longPressTimer.current) clearTimeout(longPressTimer.current);
+        if (error) throw error;
 
-        if (isDragging.current && isPickerOpen) {
-          if (hoveredReactionIndex !== null) {
-            handleSetReaction(REACTIONS[hoveredReactionIndex].id);
-          }
-          closePicker();
-        } else if (!hasMoved.current && !isPickerOpen) {
-          handleSetReaction('like');
-        } else {
-          closePicker(); 
+        // Send Notification if not owner
+        if (post.userId !== currentUserId) {
+            // Check if notification already exists to avoid spamming (optional logic)
+             await supabase.from('notifications').insert({
+                user_id: post.userId,
+                actor_id: currentUserId,
+                type: 'like',
+                title: 'New Like',
+                content: 'Someone liked your post.',
+                is_read: false
+            });
         }
-        
-        isDragging.current = false;
-        hasMoved.current = false;
-      },
-      
-      onPanResponderTerminate: () => {
-         if (longPressTimer.current) clearTimeout(longPressTimer.current);
-         closePicker();
-         isDragging.current = false;
-         hasMoved.current = false;
       }
-    })
-  ).current;
-
-  const getActiveReactionDisplay = () => {
-    if (!currentReaction) {
-      return { 
-        type: 'icon',
-        name: 'thumbs-up-outline', 
-        color: COLORS.textTertiary, 
-        label: 'Like',
-        emoji: null
-      };
+    } catch (error) {
+      console.error('Like error:', error);
+      // Revert on error
+      setIsLiked(previousState);
+      setLikesCount(previousCount);
     }
-    const r = REACTIONS.find(x => x.id === currentReaction);
-    if (r) {
-        return { 
-          type: 'emoji',
-          name: '',
-          color: r.color, 
-          label: r.label,
-          emoji: r.emoji
-        };
-    }
-    return { type: 'icon', name: 'thumbs-up', color: COLORS.primary, label: 'Liked', emoji: null };
   };
-
-  const active = getActiveReactionDisplay();
 
   return (
     <View style={styles.cardContainer}>
@@ -316,7 +187,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
         <View style={styles.statsRow}>
             <View style={styles.statsLeft}>
                 {likesCount > 0 && (
-                    <Text style={styles.statsText}>{likesCount} Reactions</Text>
+                    <Text style={styles.statsText}>{likesCount} Likes</Text>
                 )}
             </View>
             <View style={styles.statsRight}>
@@ -328,31 +199,20 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
 
         <View style={styles.divider} />
 
-        <View style={styles.footer} pointerEvents="box-none">
-            {isPickerOpen && (
-                 <Animated.View style={[styles.reactionPicker, { transform: [{ scale: pickerScale }] }]}>
-                    {REACTIONS.map((reaction, index) => (
-                        <View key={reaction.id} style={styles.reactionItem}>
-                            <Animated.Text style={[styles.reactionEmoji, { transform: [{ scale: hoverScales[index] }] }]}>
-                                {reaction.emoji}
-                            </Animated.Text>
-                        </View>
-                    ))}
-                 </Animated.View>
-            )}
-
-            <View {...panResponder.panHandlers} style={styles.actionButtonWrapper}>
-                <View style={styles.actionButton}>
-                    {active.type === 'emoji' ? (
-                      <Text style={styles.reactionEmojiButton}>{active.emoji}</Text>
-                    ) : (
-                      <Ionicons name={active.name as any} size={20} color={active.color} />
-                    )}
-                    <Text style={[styles.actionText, { color: active.color }]}>
-                        {active.label}
-                    </Text>
-                </View>
-            </View>
+        <View style={styles.footer}>
+            <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
+                <Ionicons 
+                    name={isLiked ? "heart" : "heart-outline"} 
+                    size={22} 
+                    color={isLiked ? COLORS.error : "#9EA3AE"} 
+                />
+                <Text style={[
+                    styles.actionText, 
+                    isLiked && { color: COLORS.error }
+                ]}>
+                    Like
+                </Text>
+            </TouchableOpacity>
           
             <TouchableOpacity style={styles.actionButton} onPress={onPress}>
                 <Ionicons name="chatbubble-outline" size={20} color={COLORS.textTertiary} />
@@ -385,7 +245,6 @@ const styles = StyleSheet.create({
     elevation: 5,
     borderWidth: 1,
     borderColor: 'rgba(226, 232, 240, 0.6)',
-    overflow: 'visible',
   },
   header: {
     flexDirection: 'row',
@@ -468,13 +327,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 4,
-    position: 'relative',
-    zIndex: 20,
-  },
-  actionButtonWrapper: {
-     zIndex: 30,
-     minWidth: 60, 
-     alignItems: 'center',
   },
   actionButton: {
     flexDirection: 'row',
@@ -487,37 +339,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: COLORS.textTertiary,
-  },
-  reactionPicker: {
-    position: 'absolute',
-    bottom: 50,
-    left: -10,
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 30,
-    padding: 6,
-    paddingHorizontal: 10,
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 10,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    zIndex: 100,
-  },
-  reactionItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 36,
-    height: 40,
-    position: 'relative',
-  },
-  reactionEmoji: {
-    fontSize: 24,
-  },
-  reactionEmojiButton: {
-    fontSize: 20,
   },
 });
