@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
   Vibration,
   Platform
 } from 'react-native';
@@ -14,6 +14,7 @@ import { COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { PostService } from '../../lib/postService';
 
 export interface Post {
   id: string;
@@ -59,7 +60,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
 
   const fetchLikeStatus = async () => {
     if (!currentUserId) return;
-    
+
     try {
       const { data, error } = await supabase
         .from('post_likes')
@@ -69,10 +70,10 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
         .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
-         console.error('Error fetching like status:', error);
-         return;
+        console.error('Error fetching like status:', error);
+        return;
       }
-      
+
       setIsLiked(!!data);
     } catch (error) {
       console.error('Error in fetchLikeStatus:', error);
@@ -81,55 +82,43 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
 
   const handleLike = async () => {
     if (!currentUserId) return;
-    
+
     // Optimistic Update
     const previousState = isLiked;
     const previousCount = likesCount;
-    
+
+    // Toggle state
     setIsLiked(!isLiked);
+    // Adjust count based on toggle
     setLikesCount(prev => isLiked ? prev - 1 : prev + 1);
-    
+
     if (Platform.OS === 'ios') {
-        Vibration.vibrate(10); // Subtle haptic feedback
+      Vibration.vibrate(10); // Subtle haptic feedback
     }
 
     try {
-      if (previousState) {
-        // Unlike
-        const { error } = await supabase
-          .from('post_likes')
-          .delete()
-          .eq('post_id', post.id)
-          .eq('user_id', currentUserId);
-          
-        if (error) throw error;
-      } else {
-        // Like
-        const { error } = await supabase
-          .from('post_likes')
-          .insert({
-            post_id: post.id,
-            user_id: currentUserId,
-          });
+      // Call the new Service
+      // defaulting to 'like' for now since we only have one button
+      const result = await PostService.handleReaction(post.id, currentUserId, 'like');
 
-        if (error) throw error;
+      // If result is null, it meant it was removed (correct). 
+      // If result is 'like', it was added (correct).
 
-        // Send Notification if not owner
-        if (post.userId !== currentUserId) {
-            // Check if notification already exists to avoid spamming (optional logic)
-             await supabase.from('notifications').insert({
-                user_id: post.userId,
-                actor_id: currentUserId,
-                type: 'like',
-                title: 'New Like',
-                content: 'Someone liked your post.',
-                is_read: false
-            });
-        }
+      // Optional: If we added a like and it wasn't the owner, send notification
+      if (result === 'like' && post.userId !== currentUserId) {
+        await supabase.from('notifications').insert({
+          user_id: post.userId,
+          actor_id: currentUserId,
+          type: 'like',
+          title: 'New Like',
+          content: 'Someone liked your post.',
+          is_read: false
+        });
       }
+
     } catch (error) {
       console.error('Like error:', error);
-      // Revert on error
+      // Revert Optimistic Update on error
       setIsLiked(previousState);
       setLikesCount(previousCount);
     }
@@ -137,26 +126,26 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
 
   return (
     <View style={styles.cardContainer}>
-      <TouchableOpacity 
-          onPress={onPress} 
-          activeOpacity={0.9} 
-          style={styles.cardInner}
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.9}
+        style={styles.cardInner}
       >
         <View style={styles.header}>
           <TouchableOpacity onPress={() => onProfilePress && onProfilePress(post.userId)}>
-            <Avatar 
-                initials={post.authorInitials} 
-                avatarUrl={post.authorAvatarUrl} 
-                size="small"
+            <Avatar
+              initials={post.authorInitials}
+              avatarUrl={post.authorAvatarUrl}
+              size="small"
             />
           </TouchableOpacity>
           <View style={styles.headerText}>
             <TouchableOpacity onPress={() => onProfilePress && onProfilePress(post.userId)}>
-                <Text style={styles.authorName} numberOfLines={1}>{post.authorName}</Text>
+              <Text style={styles.authorName} numberOfLines={1}>{post.authorName}</Text>
             </TouchableOpacity>
             <Text style={styles.timestamp}>{post.timestamp}</Text>
           </View>
-          
+
           <CategoryBadge category={post.category || 'default'} />
         </View>
 
@@ -167,62 +156,62 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
 
         {hasAttachment && (
           <View style={styles.attachmentContainer}>
-              <View style={[
-                  styles.attachmentIconBox, 
-                  isImage ? { backgroundColor: '#E0E7FF' } : { backgroundColor: '#FEF3C7' }
-              ]}>
-                  <Ionicons 
-                      name={isImage ? "image" : "document-text"} 
-                      size={20} 
-                      color={isImage ? COLORS.primary : COLORS.accentDark} 
-                  />
-              </View>
-              <Text style={styles.attachmentText}>
-                  {isImage ? 'Image Attachment' : 'File Attachment'}
-              </Text>
+            <View style={[
+              styles.attachmentIconBox,
+              isImage ? { backgroundColor: '#E0E7FF' } : { backgroundColor: '#FEF3C7' }
+            ]}>
+              <Ionicons
+                name={isImage ? "image" : "document-text"}
+                size={20}
+                color={isImage ? COLORS.primary : COLORS.accentDark}
+              />
+            </View>
+            <Text style={styles.attachmentText}>
+              {isImage ? 'Image Attachment' : 'File Attachment'}
+            </Text>
           </View>
         )}
-        
+
         {/* Stats Row */}
         <View style={styles.statsRow}>
-            <View style={styles.statsLeft}>
-                {likesCount > 0 && (
-                    <Text style={styles.statsText}>{likesCount} Likes</Text>
-                )}
-            </View>
-            <View style={styles.statsRight}>
-                {post.commentsCount !== undefined && post.commentsCount > 0 && (
-                    <Text style={styles.statsText}>{post.commentsCount} Comments</Text>
-                )}
-            </View>
+          <View style={styles.statsLeft}>
+            {likesCount > 0 && (
+              <Text style={styles.statsText}>{likesCount} Likes</Text>
+            )}
+          </View>
+          <View style={styles.statsRight}>
+            {post.commentsCount !== undefined && post.commentsCount > 0 && (
+              <Text style={styles.statsText}>{post.commentsCount} Comments</Text>
+            )}
+          </View>
         </View>
 
         <View style={styles.divider} />
 
         <View style={styles.footer}>
-            <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
-                <Ionicons 
-                    name={isLiked ? "heart" : "heart-outline"} 
-                    size={22} 
-                    color={isLiked ? COLORS.error : "#9EA3AE"} 
-                />
-                <Text style={[
-                    styles.actionText, 
-                    isLiked && { color: COLORS.error }
-                ]}>
-                    Like
-                </Text>
-            </TouchableOpacity>
-          
-            <TouchableOpacity style={styles.actionButton} onPress={onPress}>
-                <Ionicons name="chatbubble-outline" size={20} color={COLORS.textTertiary} />
-                <Text style={styles.actionText}>Comment</Text>
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
+            <Ionicons
+              name={isLiked ? "heart" : "heart-outline"}
+              size={22}
+              color={isLiked ? COLORS.error : "#9EA3AE"}
+            />
+            <Text style={[
+              styles.actionText,
+              isLiked && { color: COLORS.error }
+            ]}>
+              Like
+            </Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionButton} onPress={() => onSharePress && onSharePress(post)}>
-                <Ionicons name="share-social-outline" size={20} color={COLORS.textTertiary} />
-                <Text style={styles.actionText}>Share</Text>
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton} onPress={onPress}>
+            <Ionicons name="chatbubble-outline" size={20} color={COLORS.textTertiary} />
+            <Text style={styles.actionText}>Comment</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.actionButton} onPress={() => onSharePress && onSharePress(post)}>
+            <Ionicons name="share-social-outline" size={20} color={COLORS.textTertiary} />
+            <Text style={styles.actionText}>Share</Text>
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     </View>
@@ -232,7 +221,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
 const styles = StyleSheet.create({
   cardContainer: {
     marginBottom: 16,
-    zIndex: 10, 
+    zIndex: 10,
   },
   cardInner: {
     backgroundColor: COLORS.backgroundLight,

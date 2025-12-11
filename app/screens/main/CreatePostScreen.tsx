@@ -3,501 +3,335 @@ import {
   View, 
   Text, 
   TextInput, 
-  ScrollView, 
-  StyleSheet, 
-  StatusBar, 
   TouchableOpacity, 
+  StyleSheet, 
+  ScrollView, 
+  Image, 
   Alert,
   ActivityIndicator,
-  Image 
+  DeviceEventEmitter
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import * as DocumentPicker from 'expo-document-picker';
-// CHANGED: Import from 'legacy' to fix SDK 54 deprecation error
-import * as FileSystem from 'expo-file-system/legacy'; 
-import { decode } from 'base64-arraybuffer';
-import type { MainTabParamList } from '../../navigation/types';
+import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { COLORS } from '../../constants/colors';
-import { supabase } from '../../lib/supabase';
+import { CATEGORIES, CategoryType } from '../../constants/categories';
+import { PostService } from '../../lib/postService';
+import { useAuth } from '../../contexts/AuthContext';
+import PrimaryButton from '../../components/buttons/PrimaryButton';
 
-type CreatePostScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'CreatePost'>;
-
-type CategoryOption = 'study' | 'items' | 'events' | 'favors';
-
-interface Category {
-  type: CategoryOption;
-  label: string;
-  icon: string;
-  color: string;
-}
-
-const CATEGORIES: Category[] = [
-  { type: 'study', label: 'Study', icon: '📚', color: '#667EEA' },
-  { type: 'items', label: 'Items', icon: '🛍️', color: '#FBBF24' },
-  { type: 'events', label: 'Events', icon: '📅', color: '#E94B8B' },
-  { type: 'favors', label: 'Favors', icon: '💬', color: '#7B68EE' },
-];
+// 1. UI Mapping to restore your original icons and colors
+const CATEGORY_UI: Record<string, { icon: string; color: string }> = {
+  study:  { icon: '📚', color: '#667EEA' },
+  items:  { icon: '🛍️', color: '#FBBF24' },
+  events: { icon: '📅', color: '#E94B8B' },
+  favors: { icon: '💬', color: '#7B68EE' },
+  default:{ icon: '🔖', color: COLORS.primary },
+};
 
 export default function CreatePostScreen() {
-  const navigation = useNavigation<CreatePostScreenNavigationProp>();
+  const navigation = useNavigation();
+  const { session } = useAuth();
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<CategoryOption | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<CategoryType>('study');
   
-  // State for file handling
-  const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+  const [image, setImage] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleCancel = () => {
-    navigation.navigate('Home');
-  };
+  const pickImage = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (permissionResult.granted === false) {
+      Alert.alert("Permission Required", "You need to allow access to your photos to upload an image.");
+      return;
+    }
 
-  const handleBrowseFiles = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*', // Allow all file types
-        copyToCacheDirectory: true,
-      });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.5, 
+      base64: true, 
+    });
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setSelectedFile(result.assets[0]);
-      }
-    } catch (err) {
-      console.warn('Error picking file:', err);
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+      setImageBase64(result.assets[0].base64 || null);
     }
   };
 
-  const removeFile = () => {
-    setSelectedFile(null);
-  };
-
-  const uploadFile = async (userId: string): Promise<string | null> => {
-    if (!selectedFile) return null;
-
-    try {
-      const fileExt = selectedFile.name.split('.').pop();
-      const fileName = `${userId}/${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
-
-      // Read file as Base64 using the legacy FileSystem API
-      // We use the string literal 'base64' to avoid TypeScript errors with the enum
-      const base64 = await FileSystem.readAsStringAsync(selectedFile.uri, {
-        encoding: 'base64',
-      });
-
-      // Decode Base64 to ArrayBuffer
-      const arrayBuffer = decode(base64);
-
-      // Upload ArrayBuffer to Supabase
-      const { error: uploadError } = await supabase.storage
-        .from('post_attachments')
-        .upload(filePath, arrayBuffer, {
-          contentType: selectedFile.mimeType ?? 'application/octet-stream',
-          upsert: false,
-        });
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data } = supabase.storage
-        .from('post_attachments')
-        .getPublicUrl(filePath);
-
-      return data.publicUrl;
-
-    } catch (error) {
-      console.error('File upload failed:', error);
-      throw error;
-    }
-  };
-
-  const handlePost = async () => {
-    // 1. Validation
+  const handleSubmit = async () => {
     if (!title.trim() || !description.trim()) {
       Alert.alert('Missing Fields', 'Please enter a title and description.');
       return;
     }
-    if (!selectedCategory) {
-      Alert.alert('Category Required', 'Please select a category for your post.');
+
+    if (!session?.user?.id) {
+      Alert.alert('Error', 'You must be logged in to post.');
       return;
     }
 
     setLoading(true);
 
     try {
-      // 2. Get User
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        Alert.alert('Error', 'You must be logged in to post.');
-        return;
-      }
+      await PostService.createPost(
+        session.user.id,
+        title,
+        description,
+        selectedCategory,
+        imageBase64
+      );
 
-      // 3. Upload File (if exists)
-      let fileUrl = null;
-      if (selectedFile) {
-        fileUrl = await uploadFile(user.id);
-      }
-
-      // 4. Insert Post into Database
-      const { error: insertError } = await supabase
-        .from('posts')
-        .insert({
-          user_id: user.id,
-          title: title.trim(),
-          description: description.trim(),
-          category: selectedCategory,
-          file_url: fileUrl,
-          // You might want to store file_type if needed for rendering logic later
-          // file_type: selectedFile?.mimeType 
-        });
-
-      if (insertError) throw insertError;
-
-      // 5. Success
+      DeviceEventEmitter.emit('post_updated');
+      
       Alert.alert('Success', 'Post created successfully!', [
-        { text: 'OK', onPress: () => navigation.navigate('Home') }
+        { text: 'OK', onPress: () => navigation.goBack() }
       ]);
-
+      
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Something went wrong while creating the post.');
+      console.error('Create post error:', error);
+      Alert.alert('Error', error.message || 'Failed to create post. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      
-      {/* Header */}
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Kept NEW Header (Arrow Back) */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleCancel} style={styles.cancelButton} activeOpacity={0.7}>
-          <Text style={styles.cancelIcon}>✕</Text>
-          <Text style={styles.cancelText}>Cancel</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
-        
         <Text style={styles.headerTitle}>Create Post</Text>
-        
-        <TouchableOpacity 
-          onPress={handlePost} 
-          style={[styles.postButton, loading && styles.postButtonDisabled]}
-          activeOpacity={0.8}
-          disabled={loading}
-        >
-          {loading ? (
-             <ActivityIndicator color={COLORS.textLight} size="small" />
-          ) : (
-             <Text style={styles.postButtonText}>Post</Text>
-          )}
-        </TouchableOpacity>
+        <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView 
-        style={styles.content} 
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Title Input */}
+      <ScrollView style={styles.content}>
+        {/* Title */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Title</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter title"
-            placeholderTextColor={COLORS.lightGray}
+            placeholder="What's the topic?"
+            placeholderTextColor={COLORS.textTertiary}
             value={title}
             onChangeText={setTitle}
-            editable={!loading}
+            maxLength={60}
           />
         </View>
 
-        {/* Description Input */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Description</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Enter description"
-            placeholderTextColor={COLORS.lightGray}
-            value={description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            editable={!loading}
-          />
-        </View>
-
-        {/* Category Selection */}
+        {/* 2. Modified Category Section: Restored Icons & Colors */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Category</Text>
-          <View style={styles.categoryGrid}>
-            {CATEGORIES.map((category) => {
-              const isSelected = selectedCategory === category.type;
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesRow}>
+            {CATEGORIES.filter(c => c.type !== 'all').map((cat) => {
+              const ui = CATEGORY_UI[cat.type] || CATEGORY_UI.default;
+              const isSelected = selectedCategory === cat.type;
               
               return (
                 <TouchableOpacity
-                  key={category.type}
+                  key={cat.id}
+                  onPress={() => setSelectedCategory(cat.type)}
                   style={[
                     styles.categoryChip,
-                    isSelected && styles.categoryChipSelected,
+                    isSelected && styles.categoryChipSelected
                   ]}
-                  onPress={() => setSelectedCategory(category.type)}
-                  activeOpacity={0.7}
-                  disabled={loading}
                 >
-                  <Text style={styles.categoryIcon}>{category.icon}</Text>
-                  <Text 
-                    style={[
-                      styles.categoryLabel,
-                      isSelected && { color: category.color }
-                    ]}
-                  >
-                    {category.label}
+                  <Text style={styles.categoryIcon}>{ui.icon}</Text>
+                  <Text style={[
+                    styles.categoryText,
+                    isSelected && { color: ui.color } // Restore original color logic
+                  ]}>
+                    {cat.label}
                   </Text>
                 </TouchableOpacity>
               );
             })}
-          </View>
+          </ScrollView>
         </View>
 
-        {/* Attachment Section */}
+        {/* Description */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Description</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            placeholder="Share the details..."
+            placeholderTextColor={COLORS.textTertiary}
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            textAlignVertical="top"
+          />
+        </View>
+
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Attachment</Text>
           
-          {!selectedFile ? (
+          {image ? (
+            <View style={styles.imagePreviewContainer}>
+              <Image source={{ uri: image }} style={styles.imagePreview} />
+              <TouchableOpacity 
+                style={styles.removeImageButton} 
+                onPress={() => { setImage(null); setImageBase64(null); }}
+              >
+                <Ionicons name="close" size={20} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          ) : (
             <TouchableOpacity 
               style={styles.attachmentBox}
-              onPress={handleBrowseFiles}
+              onPress={pickImage}
               activeOpacity={0.7}
               disabled={loading}
             >
               <View style={styles.attachmentIconContainer}>
-                <Text style={styles.attachmentIcon}>📎</Text>
+                {/* Changed from Emoji 📎 to Icon to match App Theme Color */}
+                <Ionicons name="cloud-upload-outline" size={32} color={COLORS.primary} />
               </View>
               <Text style={styles.attachmentTitle}>Add Photo or File</Text>
-              <Text style={styles.attachmentSubtitle}>Tap to browse or drag and drop</Text>
+              <Text style={styles.attachmentSubtitle}>Tap to browse</Text>
               <View style={styles.browseButton}>
                 <Text style={styles.browseButtonText}>Browse Files</Text>
               </View>
             </TouchableOpacity>
-          ) : (
-            <View style={styles.selectedFileContainer}>
-              <View style={styles.fileInfo}>
-                <Text style={styles.fileIcon}>📄</Text>
-                <View style={styles.fileDetails}>
-                   <Text style={styles.fileName} numberOfLines={1}>{selectedFile.name}</Text>
-                   <Text style={styles.fileSize}>
-                     {(selectedFile.size ? selectedFile.size / 1024 / 1024 : 0).toFixed(2)} MB
-                   </Text>
-                </View>
-              </View>
-              <TouchableOpacity onPress={removeFile} style={styles.removeFileButton}>
-                <Text style={styles.removeFileText}>✕</Text>
-              </TouchableOpacity>
-            </View>
           )}
         </View>
+
+        <View style={styles.footer}>
+          <PrimaryButton onPress={handleSubmit} disabled={loading} style={{ width: '100%' }}>
+            {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.buttonText}>Post</Text>}
+          </PrimaryButton>
+        </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.backgroundLight,
+    backgroundColor: COLORS.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: COLORS.backgroundLight,
+    paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: '#F1F5F9',
   },
-  cancelButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  cancelIcon: {
-    fontSize: 20,
-    color: COLORS.textPrimary,
-    fontWeight: '600',
-    marginRight: 4,
-  },
-  cancelText: {
-    fontSize: 16,
-    color: COLORS.textPrimary,
-    fontWeight: '500',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-  },
-  postButton: {
-    backgroundColor: COLORS.success,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 8,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  postButtonDisabled: {
-    opacity: 0.6,
-  },
-  postButtonText: {
-    color: COLORS.textLight,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  inputGroup: {
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-    marginBottom: 8,
-  },
+  backButton: { padding: 4 },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary },
+  content: { padding: 20 },
+  inputGroup: { marginBottom: 24 },
+  label: { fontSize: 14, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 8 },
   input: {
-    backgroundColor: COLORS.backgroundLight,
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#E2E8F0',
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
+    padding: 16,
+    fontSize: 16,
     color: COLORS.textPrimary,
   },
-  textArea: {
-    minHeight: 100,
-    paddingTop: 14,
-  },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
+  textArea: { height: 120 },
+  categoriesRow: { flexDirection: 'row' },
+  
+  // Updated Chip Styles to match original look
   categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row', // Added for icon
+    alignItems: 'center', // Added for icon
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 24,
-    borderWidth: 1.5,
+    paddingVertical: 10, // Increased padding
+    borderRadius: 24,    // More rounded
+    backgroundColor: '#F1F5F9',
+    marginRight: 12,     // Increased margin
+    borderWidth: 1.5,    // Thicker border
     borderColor: COLORS.border,
-    backgroundColor: COLORS.backgroundLight,
-    marginRight: 12,
-    marginBottom: 12,
   },
   categoryChipSelected: {
-    borderColor: COLORS.faintGray,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#EEF2FF', // Keep selection background from new design (or adjust if needed)
+    borderColor: COLORS.primary, // Keep selection border
   },
   categoryIcon: {
     fontSize: 18,
     marginRight: 8,
   },
-  categoryLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.mediumGray,
+  categoryText: { 
+    fontSize: 15, // Slightly larger
+    fontWeight: '600', 
+    color: COLORS.textSecondary 
   },
+  categoryTextSelected: { 
+    color: COLORS.primary 
+  },
+
+  // Restored Attachment Styles
   attachmentBox: {
-    backgroundColor: COLORS.backgroundLight,
+    backgroundColor: '#F8FAFC', 
     borderWidth: 2,
-    borderColor: COLORS.border,
+    borderColor: '#E2E8F0', // Matches your input borders
     borderStyle: 'dashed',
     borderRadius: 16,
     padding: 32,
     alignItems: 'center',
   },
   attachmentIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#D1FAE5',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#EEF2FF', // Light Indigo (matches selected category theme)
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  attachmentIcon: {
-    fontSize: 28,
+    marginBottom: 12,
   },
   attachmentTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: COLORS.textPrimary,
-    marginTop: 4,
     marginBottom: 4,
   },
   attachmentSubtitle: {
-    fontSize: 13,
-    color: COLORS.mediumGray,
-    marginBottom: 12,
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginBottom: 16,
   },
   browseButton: {
-    backgroundColor: COLORS.success,
+    backgroundColor: COLORS.primary, // Changed from Green to App Primary Color
     paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginTop: 4,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
   browseButtonText: {
-    color: COLORS.textLight,
+    color: '#FFF',
     fontSize: 15,
     fontWeight: '700',
   },
-  // New Styles for Selected File
-  selectedFileContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: COLORS.backgroundLight,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+  imagePreviewContainer: {
+    position: 'relative',
+    width: '100%',
+    height: 200,
     borderRadius: 12,
-    padding: 12,
+    overflow: 'hidden',
   },
-  fileInfo: {
-    flexDirection: 'row',
+  imagePreview: { width: '100%', height: '100%' },
+  removeImageButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 15,
+    width: 30,
+    height: 30,
     alignItems: 'center',
-    flex: 1,
+    justifyContent: 'center',
   },
-  fileIcon: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  fileDetails: {
-    flex: 1,
-  },
-  fileName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-    marginBottom: 2,
-  },
-  fileSize: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  removeFileButton: {
-    padding: 8,
-    marginLeft: 8,
-  },
-  removeFileText: {
-    fontSize: 18,
-    color: COLORS.textSecondary,
-    fontWeight: '600',
-  },
+  footer: { marginTop: 20, marginBottom: 50 },
+  buttonText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
 });
