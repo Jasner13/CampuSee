@@ -28,6 +28,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Avatar } from '../../components/Avatar';
 import { Comment } from '../../types';
+import { CategoryBadge } from '../../components/CategoryBadge';
 
 type PostDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'PostDetails'>;
 type PostDetailScreenRouteProp = RouteProp<RootStackParamList, 'PostDetails'>;
@@ -333,7 +334,7 @@ export default function PostDetailScreen() {
         peerId: post.userId,
         peerName: post.authorName,
         peerInitials: post.authorInitials,
-        peerAvatarUrl: post.authorAvatarUrl, // Pass avatar here
+        peerAvatarUrl: post.authorAvatarUrl,
     });
   };
 
@@ -342,18 +343,16 @@ export default function PostDetailScreen() {
   const renderHeader = () => (
     <View style={styles.postCard}>
         <View style={styles.authorSection}>
-        <View style={{ marginRight: 12 }}>
-            <Avatar initials={post.authorInitials} avatarUrl={post.authorAvatarUrl} size="default" />
-        </View>
+            <View style={{ marginRight: 12 }}>
+                <Avatar initials={post.authorInitials} avatarUrl={post.authorAvatarUrl} size="default" />
+            </View>
 
-        <View style={styles.authorInfo}>
-            <Text style={styles.authorName}>{post.authorName}</Text>
-            <Text style={styles.timestamp}>{post.timestamp}</Text>
-        </View>
-        
-        <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>Study</Text>
-        </View>
+            <View style={styles.authorInfo}>
+                <Text style={styles.authorName}>{post.authorName}</Text>
+                <Text style={styles.timestamp}>{post.timestamp}</Text>
+            </View>
+            
+            <CategoryBadge category={post.category || 'default'} />
         </View>
 
         {isEditing ? (
