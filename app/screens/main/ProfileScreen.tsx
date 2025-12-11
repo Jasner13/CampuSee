@@ -12,12 +12,15 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Profile } from '../../types';
 
+
 type ProfileScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Profile'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
 
+
 type TabType = 'myPosts' | 'saved';
+
 
 const getRelativeTime = (dateString: string) => {
   const date = new Date(dateString);
@@ -33,9 +36,11 @@ const getRelativeTime = (dateString: string) => {
   return date.toLocaleDateString();
 };
 
+
 export default function ProfileScreen() {
   const navigation = useNavigation<ProfileScreenNavigationProp>();
   const { session } = useAuth();
+
 
   const [activeTab, setActiveTab] = useState<TabType>('myPosts');
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -46,20 +51,25 @@ export default function ProfileScreen() {
   const [savedPosts, setSavedPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(false);
 
+
   // New states for followers
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
+
 
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
 
+
       const fetchData = async () => {
         if (!session?.user) return;
+
 
         let fetchedProfile: Profile | null = null;
         let derivedInitials = '??';
         let derivedName = 'Anonymous Student';
+
 
         try {
           const { data: profileData, error: profileError } = await supabase
@@ -68,7 +78,9 @@ export default function ProfileScreen() {
             .eq('id', session.user.id)
             .single();
 
+
           if (profileError) console.error('Error fetching profile:', profileError);
+
 
           if (isActive && profileData) {
             fetchedProfile = profileData as Profile;
@@ -78,6 +90,7 @@ export default function ProfileScreen() {
             derivedInitials = derivedName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase();
             setInitials(derivedInitials);
           }
+
 
           // Fetch Followers/Following Counts
           // Followers: People where following_id = me
@@ -97,11 +110,13 @@ export default function ProfileScreen() {
               setFollowingCount(following || 0);
           }
 
+
         } catch (err) {
           console.error('Profile fetch error:', err);
         } finally {
           if (isActive) setLoadingProfile(false);
         }
+
 
         if (isActive) setLoadingPosts(true);
         
@@ -114,6 +129,7 @@ export default function ProfileScreen() {
             .order('created_at', { ascending: false });
           
           if (postsError) console.error('Error fetching posts:', postsError);
+
 
           if (isActive && postsData) {
              const formattedPosts: Post[] = postsData.map((item: any) => ({
@@ -134,6 +150,7 @@ export default function ProfileScreen() {
              setMyPosts(formattedPosts);
           }
 
+
           // Fetch Saved Posts
           const { data: savedData, error: savedError } = await supabase
             .from('saved_posts')
@@ -148,7 +165,9 @@ export default function ProfileScreen() {
             .eq('user_id', session.user.id)
             .order('created_at', { ascending: false });
 
+
             if (savedError) console.error('Error fetching saved:', savedError);
+
 
             if (isActive && savedData) {
                 const formattedSaved: Post[] = savedData.map((item: any) => {
@@ -175,6 +194,7 @@ export default function ProfileScreen() {
                 setSavedPosts(formattedSaved);
             }
 
+
         } catch (err) {
             console.error(err);
         } finally {
@@ -182,11 +202,14 @@ export default function ProfileScreen() {
         }
       };
 
+
       fetchData();
+
 
       return () => { isActive = false; };
     }, [session])
   );
+
 
   const handleNavigate = (item: 'home' | 'messages' | 'notifications' | 'profile') => {
     const routeMap = {
@@ -198,35 +221,44 @@ export default function ProfileScreen() {
     navigation.navigate(routeMap[item]);
   };
 
+
   const handleCreatePost = () => {
     navigation.navigate('CreatePost');
   };
+
 
   const handlePostPress = (post: Post) => {
     navigation.navigate('PostDetails', { post });
   };
 
+
   const handleSettingsPress = () => {
     navigation.navigate('Settings');
   };
 
+
   const displayPosts = activeTab === 'myPosts' ? myPosts : savedPosts;
+
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
+
 
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={() => navigation.goBack()}>
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
 
+
         <Text style={styles.headerTitle}>Profile</Text>
+
 
         <TouchableOpacity style={styles.settingsButton} activeOpacity={0.7} onPress={handleSettingsPress}>
           <Text style={styles.settingsIcon}>⚙️</Text>
         </TouchableOpacity>
       </View>
+
 
       <ScrollView
         style={styles.content}
@@ -258,6 +290,7 @@ export default function ProfileScreen() {
             <View style={styles.onlineBadge} />
           </View>
 
+
           {loadingProfile ? (
             <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: 10 }} />
           ) : (
@@ -266,6 +299,7 @@ export default function ProfileScreen() {
               <Text style={styles.userBio}>{profile?.program || 'No Program Selected'}</Text>
             </>
           )}
+
 
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
@@ -284,6 +318,7 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
+
 
         <View style={styles.stickyWrapper}>
           <View style={styles.tabsContainer}>
@@ -308,6 +343,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+
         <View style={styles.postsContainer}>
           {loadingPosts ? (
              <ActivityIndicator color={COLORS.primary} style={{ marginTop: 20 }} />
@@ -325,10 +361,12 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
 
+
       <BottomNav selected="profile" onNavigate={handleNavigate} onCreatePost={handleCreatePost} />
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -424,6 +462,7 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     width: '100%',
     paddingHorizontal: 20,
   },
@@ -447,7 +486,6 @@ const styles = StyleSheet.create({
     width: 1,
     height: 40,
     backgroundColor: COLORS.border,
-    marginHorizontal: 20,
   },
   stickyWrapper: {
     backgroundColor: COLORS.backgroundLight,
