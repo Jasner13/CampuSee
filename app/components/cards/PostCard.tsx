@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
   Vibration,
-  Platform
+  Platform,
+  Image,
+  Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Avatar } from '../Avatar';
@@ -15,6 +17,9 @@ import { FONTS } from '../../constants/fonts';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { PostService } from '../../lib/postService';
+
+// Get screen width to calculate image aspect ratio if needed
+const { width } = Dimensions.get('window');
 
 export interface Post {
   id: string;
@@ -28,6 +33,7 @@ export interface Post {
   description: string;
   category?: string;
   fileUrl?: string | null;
+  fileType?: string | null; // Added to check if it's image/video
   likesCount?: number;
   commentsCount?: number;
 }
@@ -46,21 +52,23 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likesCount || 0);
 
-  const hasAttachment = !!post.fileUrl;
-  const isImage = post.fileUrl ? /\.(jpg|jpeg|png|gif|webp)$/i.test(post.fileUrl) : false;
+  // Helper to determine if we can show a preview
+  // Checks if fileUrl exists and if the fileType (from DB) is 'image' OR if the extension looks like an image
+  const isImage = post.fileUrl && (
+      post.fileType === 'image' || 
+      /\.(jpg|jpeg|png|gif|webp)$/i.test(post.fileUrl)
+  );
 
   useEffect(() => {
     fetchLikeStatus();
   }, [post.id, currentUserId]);
 
-  // Sync count if parent updates
   useEffect(() => {
     setLikesCount(post.likesCount || 0);
   }, [post.likesCount]);
 
   const fetchLikeStatus = async () => {
     if (!currentUserId) return;
-
     try {
       const { data, error } = await supabase
         .from('post_likes')
@@ -69,11 +77,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
         .eq('user_id', currentUserId)
         .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching like status:', error);
-        return;
-      }
-
+      if (error && error.code !== 'PGRST116') return;
       setIsLiked(!!data);
     } catch (error) {
       console.error('Error in fetchLikeStatus:', error);
@@ -82,43 +86,31 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
 
   const handleLike = async () => {
     if (!currentUserId) return;
-
-    // Optimistic Update
+    
     const previousState = isLiked;
     const previousCount = likesCount;
-
-    // Toggle state
+    
     setIsLiked(!isLiked);
-    // Adjust count based on toggle
     setLikesCount(prev => isLiked ? prev - 1 : prev + 1);
-
+    
     if (Platform.OS === 'ios') {
-      Vibration.vibrate(10); // Subtle haptic feedback
+        Vibration.vibrate(10);
     }
 
     try {
-      // Call the new Service
-      // defaulting to 'like' for now since we only have one button
       const result = await PostService.handleReaction(post.id, currentUserId, 'like');
-
-      // If result is null, it meant it was removed (correct). 
-      // If result is 'like', it was added (correct).
-
-      // Optional: If we added a like and it wasn't the owner, send notification
       if (result === 'like' && post.userId !== currentUserId) {
-        await supabase.from('notifications').insert({
-          user_id: post.userId,
-          actor_id: currentUserId,
-          type: 'like',
-          title: 'New Like',
-          content: 'Someone liked your post.',
-          is_read: false
-        });
+             await supabase.from('notifications').insert({
+                user_id: post.userId,
+                actor_id: currentUserId,
+                type: 'like',
+                title: 'New Like',
+                content: 'Someone liked your post.',
+                is_read: false
+            });
       }
-
     } catch (error) {
       console.error('Like error:', error);
-      // Revert Optimistic Update on error
       setIsLiked(previousState);
       setLikesCount(previousCount);
     }
@@ -126,92 +118,93 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
 
   return (
     <View style={styles.cardContainer}>
-      <TouchableOpacity
-        onPress={onPress}
-        activeOpacity={0.9}
-        style={styles.cardInner}
+      <TouchableOpacity 
+          onPress={onPress} 
+          activeOpacity={0.9} 
+          style={styles.cardInner}
       >
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => onProfilePress && onProfilePress(post.userId)}>
-            <Avatar
-              initials={post.authorInitials}
-              avatarUrl={post.authorAvatarUrl}
-              size="small"
+            <Avatar 
+                initials={post.authorInitials} 
+                avatarUrl={post.authorAvatarUrl} 
+                size="small"
             />
           </TouchableOpacity>
           <View style={styles.headerText}>
             <TouchableOpacity onPress={() => onProfilePress && onProfilePress(post.userId)}>
-              <Text style={styles.authorName} numberOfLines={1}>{post.authorName}</Text>
+                <Text style={styles.authorName} numberOfLines={1}>{post.authorName}</Text>
             </TouchableOpacity>
             <Text style={styles.timestamp}>{post.timestamp}</Text>
           </View>
-
           <CategoryBadge category={post.category || 'default'} />
         </View>
 
+        {/* Text Content */}
         <View style={styles.content}>
           <Text style={styles.title} numberOfLines={2}>{post.title}</Text>
           <Text style={styles.description} numberOfLines={3}>{post.description}</Text>
         </View>
 
-        {hasAttachment && (
-          <View style={styles.attachmentContainer}>
-            <View style={[
-              styles.attachmentIconBox,
-              isImage ? { backgroundColor: '#E0E7FF' } : { backgroundColor: '#FEF3C7' }
-            ]}>
-              <Ionicons
-                name={isImage ? "image" : "document-text"}
-                size={20}
-                color={isImage ? COLORS.primary : COLORS.accentDark}
+        {/* Media Content (The Change) */}
+        {post.fileUrl && (
+          <View style={styles.mediaContainer}>
+            {isImage ? (
+              // 1. If it's an image, show it directly
+              <Image 
+                source={{ uri: post.fileUrl }} 
+                style={styles.postImage}
+                resizeMode="cover"
               />
-            </View>
-            <Text style={styles.attachmentText}>
-              {isImage ? 'Image Attachment' : 'File Attachment'}
-            </Text>
+            ) : (
+              // 2. If it's a file/audio/video (future proofing), keep the attachment box style for now
+              <View style={styles.attachmentBox}>
+                 <View style={styles.attachmentIcon}>
+                    <Ionicons name="document-text-outline" size={24} color={COLORS.primary} />
+                 </View>
+                 <Text style={styles.attachmentText}>Attachment</Text>
+              </View>
+            )}
           </View>
         )}
-
+        
         {/* Stats Row */}
         <View style={styles.statsRow}>
-          <View style={styles.statsLeft}>
-            {likesCount > 0 && (
-              <Text style={styles.statsText}>{likesCount} Likes</Text>
-            )}
-          </View>
-          <View style={styles.statsRight}>
-            {post.commentsCount !== undefined && post.commentsCount > 0 && (
-              <Text style={styles.statsText}>{post.commentsCount} Comments</Text>
-            )}
-          </View>
+            <View style={styles.statsLeft}>
+                {likesCount > 0 && (
+                    <Text style={styles.statsText}>{likesCount} Likes</Text>
+                )}
+            </View>
+            <View style={styles.statsRight}>
+                {post.commentsCount !== undefined && post.commentsCount > 0 && (
+                    <Text style={styles.statsText}>{post.commentsCount} Comments</Text>
+                )}
+            </View>
         </View>
 
         <View style={styles.divider} />
 
+        {/* Action Buttons */}
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
-            <Ionicons
-              name={isLiked ? "heart" : "heart-outline"}
-              size={22}
-              color={isLiked ? COLORS.error : "#9EA3AE"}
-            />
-            <Text style={[
-              styles.actionText,
-              isLiked && { color: COLORS.error }
-            ]}>
-              Like
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
+                <Ionicons 
+                    name={isLiked ? "heart" : "heart-outline"} 
+                    size={22} 
+                    color={isLiked ? COLORS.error : "#9EA3AE"} 
+                />
+                <Text style={[styles.actionText, isLiked && { color: COLORS.error }]}>Like</Text>
+            </TouchableOpacity>
+          
+            <TouchableOpacity style={styles.actionButton} onPress={onPress}>
+                <Ionicons name="chatbubble-outline" size={20} color={COLORS.textTertiary} />
+                <Text style={styles.actionText}>Comment</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionButton} onPress={onPress}>
-            <Ionicons name="chatbubble-outline" size={20} color={COLORS.textTertiary} />
-            <Text style={styles.actionText}>Comment</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.actionButton} onPress={() => onSharePress && onSharePress(post)}>
-            <Ionicons name="share-social-outline" size={20} color={COLORS.textTertiary} />
-            <Text style={styles.actionText}>Share</Text>
-          </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton} onPress={() => onSharePress && onSharePress(post)}>
+                <Ionicons name="share-social-outline" size={20} color={COLORS.textTertiary} />
+                <Text style={styles.actionText}>Share</Text>
+            </TouchableOpacity>
         </View>
       </TouchableOpacity>
     </View>
@@ -221,7 +214,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
 const styles = StyleSheet.create({
   cardContainer: {
     marginBottom: 16,
-    zIndex: 10,
+    zIndex: 10, 
   },
   cardInner: {
     backgroundColor: COLORS.backgroundLight,
@@ -272,26 +265,34 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: '400',
   },
-  attachmentContainer: {
+  // New Media Styles
+  mediaContainer: {
+    marginBottom: 14,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#F1F5F9', // Placeholder color while loading
+  },
+  postImage: {
+    width: '100%',
+    height: 250, // Fixed height for feed consistency
+  },
+  attachmentBox: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 12,
     backgroundColor: '#F8FAFC',
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 14,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
   },
-  attachmentIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+  attachmentIcon: {
     marginRight: 10,
+    padding: 8,
+    backgroundColor: '#E0E7FF',
+    borderRadius: 8,
   },
   attachmentText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: COLORS.textSecondary,
   },

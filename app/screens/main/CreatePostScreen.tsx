@@ -64,6 +64,14 @@ export default function CreatePostScreen() {
     }
   };
 
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    setSelectedCategory('study');
+    setImage(null);
+    setImageBase64(null);
+  };
+
   const handleSubmit = async () => {
     if (!title.trim() || !description.trim()) {
       Alert.alert('Missing Fields', 'Please enter a title and description.');
@@ -86,8 +94,12 @@ export default function CreatePostScreen() {
         imageBase64
       );
 
+      // Notify Home to refresh
       DeviceEventEmitter.emit('post_updated');
       
+      // 2. Clear the form BEFORE navigating away
+      resetForm();
+
       Alert.alert('Success', 'Post created successfully!', [
         { text: 'OK', onPress: () => navigation.goBack() }
       ]);

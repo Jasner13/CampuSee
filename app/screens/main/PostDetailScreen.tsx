@@ -165,8 +165,8 @@ export default function PostDetailScreen() {
         // Send Notification if not owner
         if (post.userId !== currentUserId) {
             await supabase.from('notifications').insert({
-                user_id: post.userId, // Recipient
-                actor_id: currentUserId, // Sender
+                user_id: post.userId, 
+                actor_id: currentUserId, 
                 type: 'like',
                 title: 'New Like',
                 content: 'Someone liked your post.',
@@ -399,16 +399,31 @@ export default function PostDetailScreen() {
         </View>
         )}
 
+        {/* --- CHANGED: Display Image directly if it's an image --- */}
         {post.fileUrl && !isEditing && (
-            <TouchableOpacity style={styles.attachment} onPress={handleViewAttachment} activeOpacity={0.7}>
-            <View style={styles.attachmentIcon}>
-                <Ionicons name={isImage ? "image" : "document-text"} size={24} color="#5C6BC0" />
+            <View style={styles.mediaContainer}>
+                {isImage ? (
+                    // 1. Show Image directly
+                    <TouchableOpacity onPress={() => setImageModalVisible(true)} activeOpacity={0.9}>
+                        <Image 
+                            source={{ uri: post.fileUrl }} 
+                            style={styles.postImage} 
+                            resizeMode="cover" 
+                        />
+                    </TouchableOpacity>
+                ) : (
+                    // 2. Fallback to Attachment Box for non-images (PDFs, etc.)
+                    <TouchableOpacity style={styles.attachment} onPress={handleViewAttachment} activeOpacity={0.7}>
+                        <View style={styles.attachmentIcon}>
+                            <Ionicons name="document-text" size={24} color="#5C6BC0" />
+                        </View>
+                        <View style={styles.attachmentInfo}>
+                            <Text style={styles.attachmentName} numberOfLines={1}>{fileName}</Text>
+                            <Text style={styles.attachmentSize}>Tap to open file</Text>
+                        </View>
+                    </TouchableOpacity>
+                )}
             </View>
-            <View style={styles.attachmentInfo}>
-                <Text style={styles.attachmentName} numberOfLines={1}>{fileName}</Text>
-                <Text style={styles.attachmentSize}>{isImage ? 'Tap to view image' : 'Tap to open file'}</Text>
-            </View>
-        </TouchableOpacity>
         )}
 
         {!isEditing && (
@@ -473,7 +488,6 @@ export default function PostDetailScreen() {
         ? item.profiles.full_name.split(' ').map((n: string) => n[0]).join('').substring(0,2).toUpperCase()
         : '??';
     
-    // Updated to use Avatar component
     return (
         <View style={styles.replyCard}>
             <View style={styles.replyAvatarContainer}>
@@ -758,13 +772,26 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
+  
+  // --- NEW STYLES FOR MEDIA ---
+  mediaContainer: {
+    marginBottom: 24,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  postImage: {
+    width: '100%',
+    height: 300, // Taller than the feed version for detail view
+    backgroundColor: '#F1F5F9',
+  },
+  // ---------------------------
+
   attachment: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#E8EAF6', 
     padding: 16,
     borderRadius: 12,
-    marginBottom: 24,
     borderWidth: 1,
     borderColor: '#C5CAE9',
   },
