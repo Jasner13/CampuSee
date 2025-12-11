@@ -12,7 +12,6 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Avatar } from '../../components/Avatar';
-// IMPORT TYPES FROM CENTRAL SOURCE
 import { ConversationView, Profile } from '../../types';
 
 type MessagesScreenNavigationProp = CompositeNavigationProp<
@@ -24,14 +23,12 @@ export default function MessagesScreen() {
   const navigation = useNavigation<MessagesScreenNavigationProp>();
   const { session } = useAuth();
 
-  // Use imported ConversationView type
   const [conversations, setConversations] = useState<ConversationView[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Search State
   const [isSearching, setIsSearching] = useState(false);
   const [searchText, setSearchText] = useState('');
-  // Use imported Profile type
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [isSearchingLoading, setIsSearchingLoading] = useState(false);
 
@@ -164,6 +161,25 @@ export default function MessagesScreen() {
     return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   };
 
+  // --- Helper to parse shared post JSON ---
+  const getMessagePreview = (content: string, senderId: string) => {
+    try {
+        if (content && content.trim().startsWith('{')) {
+            const parsed = JSON.parse(content);
+            if (parsed.type === 'share_post') {
+                const isMe = senderId === session?.user?.id;
+                const postTitle = parsed.title || 'a post';
+                return isMe 
+                    ? `You shared a post: "${postTitle}"`
+                    : `Shared a post: "${postTitle}"`;
+            }
+        }
+    } catch (e) {
+        // Content is not JSON, return original
+    }
+    return content;
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundLight} />
@@ -248,7 +264,7 @@ export default function MessagesScreen() {
               return (
                 <MessageCard
                   name={name}
-                  messagePreview={item.last_message}
+                  messagePreview={getMessagePreview(item.last_message, item.sender_id)}
                   time={formatTime(item.time)}
                   initials={initials}
                   avatarUrl={item.peer_avatar}
