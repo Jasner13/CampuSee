@@ -20,12 +20,13 @@ import { SearchBar } from '../../components/SearchBar';
 import { CategoryChip } from '../../components/CategoryChip';
 import { PostCard, Post } from '../../components/cards/PostCard';
 import { BottomNav } from '../../components/BottomNav';
+import { UserProfileModal } from '../../components/modals/UserProfileModal';
+import { SharePostModal } from '../../components/modals/SharePostModal';
 import { GRADIENTS, COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { CATEGORIES, CategoryType } from '../../constants/categories';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Post as PostEntity } from '../../types';
 
 type HomeFeedScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Home'>,
@@ -62,14 +63,22 @@ export const HomeFeedScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Modal States
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [userModalVisible, setUserModalVisible] = useState(false);
+  const [selectedPostToShare, setSelectedPostToShare] = useState<Post | null>(null);
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+
   const fetchPosts = async () => {
     try {
-      // 'profiles!posts_user_id_fkey' targets the author relationship
+      // Includes counts for likes and comments
       let query = supabase
         .from('posts')
         .select(`
           *,
-          profiles:profiles!posts_user_id_fkey (full_name, avatar_url)
+          profiles:profiles!posts_user_id_fkey (full_name, avatar_url),
+          post_likes(count),
+          comments(count)
         `)
         .order('created_at', { ascending: false });
 
@@ -89,13 +98,9 @@ export const HomeFeedScreen: React.FC = () => {
       }
 
       if (data) {
-        // Safe Cast to Central DB Type
-        const dbPosts = data as unknown as PostEntity[];
-
-        const formattedPosts: Post[] = dbPosts.map((item) => ({
+        const formattedPosts: Post[] = data.map((item: any) => ({
           id: item.id,
           userId: item.user_id,
-          // Access joined profile data safely
           authorName: item.profiles?.full_name || 'Unknown User',
           authorInitials: getInitials(item.profiles?.full_name || null),
           authorAvatarUrl: item.profiles?.avatar_url,
@@ -104,7 +109,10 @@ export const HomeFeedScreen: React.FC = () => {
           title: item.title,
           description: item.description,
           category: item.category,
-          fileUrl: item.file_url
+          fileUrl: item.file_url,
+          // Map counts from Supabase response
+          likesCount: item.post_likes?.[0]?.count || 0,
+          commentsCount: item.comments?.[0]?.count || 0,
         }));
         setPosts(formattedPosts);
       }
@@ -161,6 +169,16 @@ export const HomeFeedScreen: React.FC = () => {
 
   const handlePostPress = (post: Post) => {
     navigation.navigate('PostDetails', { post });
+  };
+
+  const handleUserPress = (userId: string) => {
+      setSelectedUserId(userId);
+      setUserModalVisible(true);
+  };
+
+  const handleSharePress = (post: Post) => {
+      setSelectedPostToShare(post);
+      setShareModalVisible(true);
   };
 
   return (
@@ -249,12 +267,36 @@ export const HomeFeedScreen: React.FC = () => {
           </View>
         ) : (
           posts.map((post) => (
-            <PostCard key={post.id} post={post} onPress={() => handlePostPress(post)} />
+            <PostCard 
+                key={post.id} 
+                post={post} 
+                onPress={() => handlePostPress(post)}
+                onProfilePress={handleUserPress}
+                onSharePress={handleSharePress}
+            />
           ))
         )}
       </ScrollView>
 
       <BottomNav selected="home" onNavigate={handleNavigate} onCreatePost={handleCreatePost} />
+
+      {/* Modals */}
+      {selectedUserId && (
+          <UserProfileModal 
+            visible={userModalVisible} 
+            onClose={() => setUserModalVisible(false)} 
+            userId={selectedUserId} 
+          />
+      )}
+      
+      {selectedPostToShare && (
+          <SharePostModal 
+            visible={shareModalVisible}
+            onClose={() => setShareModalVisible(false)}
+            post={selectedPostToShare}
+          />
+      )}
+
     </View>
   );
 };
