@@ -28,7 +28,7 @@ export const AppNavigator: React.FC = () => {
 
   return (
     <Stack.Navigator
-      id={undefined} // RESTORED THIS LINE
+      id={undefined}
       screenOptions={{
         headerShown: false,
         animation: 'fade',

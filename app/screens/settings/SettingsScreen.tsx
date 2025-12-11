@@ -6,15 +6,10 @@ import type { MainTabParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
+import { Profile } from '../../types';
 
 type SettingsScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Settings'>;
-
-// Define the shape of our settings JSON
-interface UserSettings {
-  replies_to_posts: boolean;
-  new_messages: boolean;
-  post_interactions: boolean;
-}
+type UserSettings = NonNullable<Profile['settings']>;
 
 const DEFAULT_SETTINGS: UserSettings = {
   replies_to_posts: true,

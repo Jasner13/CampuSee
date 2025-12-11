@@ -6,7 +6,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 import { BottomNav } from '../../components/BottomNav';
-import { PostCard, Post } from '../../components/cards/PostCard';
+import { PostCard, Post } from '../../components/cards/PostCard'; // UI Post Type
 import { GRADIENTS, COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -83,7 +83,7 @@ export default function ProfileScreen() {
         if (isActive) setLoadingPosts(true);
         
         try {
-          // 1. Fetch My Posts
+          // Fetch My Posts
           const { data: postsData, error: postsError } = await supabase
             .from('posts')
             .select('*')
@@ -109,8 +109,7 @@ export default function ProfileScreen() {
              setMyPosts(formattedPosts);
           }
 
-          // 2. Fetch Saved Posts (Joining saved_posts -> posts -> profiles)
-          // Note the explicitly named relationship: profiles:profiles!posts_user_id_fkey
+          // Fetch Saved Posts
           const { data: savedData, error: savedError } = await supabase
             .from('saved_posts')
             .select(`

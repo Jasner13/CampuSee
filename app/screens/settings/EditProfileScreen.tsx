@@ -16,25 +16,22 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import { decode } from 'base64-arraybuffer'; // Ensure you installed this: npm install base64-arraybuffer
+import { decode } from 'base64-arraybuffer'; 
 import { COLORS, GRADIENTS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { RootStackParamList } from '../../navigation/types';
-
+import { Profile } from '../../types';
 
 type EditProfileRouteProp = RouteProp<RootStackParamList, 'EditProfile'>;
-
 
 export default function EditProfileScreen() {
   const navigation = useNavigation();
   const route = useRoute<EditProfileRouteProp>();
   const { session, refreshProfile } = useAuth();
 
-
   // Check if we are in "Setup Mode" (New User)
   const isNewUser = route.params?.isNewUser || false;
-
 
   // State for form fields
   const [name, setName] = useState('');
@@ -46,12 +43,10 @@ export default function EditProfileScreen() {
   const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
   const [avatarExtension, setAvatarExtension] = useState<string | null>(null);
 
-
   // UI State
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showProgramDropdown, setShowProgramDropdown] = useState(false);
-
 
   const programs = [
     'BS Computer Engineering',
@@ -61,19 +56,16 @@ export default function EditProfileScreen() {
     'BS Information Systems',
   ];
 
-
   useEffect(() => {
     if (session?.user) {
       fetchProfile();
     }
   }, [session]);
 
-
   const fetchProfile = async () => {
     try {
       setIsLoading(true);
       if (!session?.user) throw new Error('No user on the session!');
-
 
       const { data, error } = await supabase
         .from('profiles')
@@ -81,15 +73,15 @@ export default function EditProfileScreen() {
         .eq('id', session.user.id)
         .single();
 
-
       if (error && error.code !== 'PGRST116') throw error;
 
-
       if (data) {
-        setName(data.full_name || '');
-        setProgram(data.program || '');
-        setBio(data.bio || '');
-        setAvatarUrl(data.avatar_url || null);
+        // Safe casting to Central Profile Type
+        const profileData = data as Profile;
+        setName(profileData.full_name || '');
+        setProgram(profileData.program || '');
+        setBio(profileData.bio || '');
+        setAvatarUrl(profileData.avatar_url || null);
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -100,12 +92,10 @@ export default function EditProfileScreen() {
     }
   };
 
-
   const handleBack = () => {
     if (isNewUser) return;
     navigation.goBack();
   };
-
 
   // ---------------------------------------------------------------------------
   // 2. FIXED IMAGE PICKER LOGIC (SDK 52+ Compatible)
@@ -118,16 +108,13 @@ export default function EditProfileScreen() {
       return;
     }
 
-
     const result = await ImagePicker.launchImageLibraryAsync({
-      // FIXED: Use string array directly. 'MediaType.Images' is removed in new SDKs.
       mediaTypes: ['images'], 
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.5,
       base64: true, // Essential for uploading to Supabase
     });
-
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const asset = result.assets[0];
@@ -140,18 +127,15 @@ export default function EditProfileScreen() {
     }
   };
 
-
   // ---------------------------------------------------------------------------
   // 3. UPLOAD LOGIC
   // ---------------------------------------------------------------------------
   const uploadAvatar = async () => {
     if (!avatarBase64 || !session?.user) return null;
 
-
     try {
       const ext = avatarExtension || 'jpg';
       const fileName = `${session.user.id}/${Date.now()}.${ext}`;
-
 
       // Convert Base64 -> ArrayBuffer -> Supabase Storage
       const { error: uploadError } = await supabase.storage
@@ -161,13 +145,10 @@ export default function EditProfileScreen() {
           upsert: true,
         });
 
-
       if (uploadError) throw uploadError;
-
 
       const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
       return data.publicUrl;
-
 
     } catch (error) {
       console.log('Upload error:', error);
@@ -175,34 +156,28 @@ export default function EditProfileScreen() {
     }
   };
 
-
   const handleSaveChanges = async () => {
     if (!name.trim()) {
       Alert.alert('Error', 'Name cannot be empty');
       return;
     }
 
-
     if (!program) {
       Alert.alert('Error', 'Please select a program');
       return;
     }
 
-
     try {
       setIsSaving(true);
       if (!session?.user) throw new Error('No user on the session!');
 
-
       let finalAvatarUrl = avatarUrl;
-
 
       // Only upload if a NEW photo was picked
       if (avatarBase64) {
         const uploadedUrl = await uploadAvatar();
         if (uploadedUrl) finalAvatarUrl = uploadedUrl;
       }
-
 
       const updates = {
         id: session.user.id,
@@ -213,22 +188,17 @@ export default function EditProfileScreen() {
         updated_at: new Date(),
       };
 
-
       const { error } = await supabase.from('profiles').upsert(updates);
-
 
       if (error) throw error;
 
-
       await refreshProfile();
-
 
       if (!isNewUser) {
         Alert.alert('Success', 'Profile updated!', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
       }
-
 
     } catch (error) {
       if (error instanceof Error) {
@@ -239,16 +209,13 @@ export default function EditProfileScreen() {
     }
   };
 
-
   const selectProgram = (selectedProgram: string) => {
     setProgram(selectedProgram);
     setShowProgramDropdown(false);
   };
 
-
   const bioLength = bio.length;
   const maxBioLength = 200;
-
 
   const getInitials = () => {
     if (!name) return 'JL';
@@ -259,7 +226,6 @@ export default function EditProfileScreen() {
     return name.substring(0, 2).toUpperCase();
   };
 
-
   if (isLoading) {
     return (
       <View style={[styles.container, styles.center]}>
@@ -268,11 +234,9 @@ export default function EditProfileScreen() {
     );
   }
 
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-
 
       {/* Header */}
       <View style={styles.header}>
@@ -284,11 +248,9 @@ export default function EditProfileScreen() {
           <View style={styles.backButton} />
         )}
 
-
         <Text style={styles.headerTitle}>Edit Profile</Text>
         <View style={styles.placeholder} />
       </View>
-
 
       <ScrollView
         style={styles.content}
@@ -320,7 +282,6 @@ export default function EditProfileScreen() {
           </TouchableOpacity>
         </View>
 
-
         {/* Name Input */}
         <View style={styles.inputSection}>
           <Text style={styles.label}>Name</Text>
@@ -335,7 +296,6 @@ export default function EditProfileScreen() {
             />
           </View>
         </View>
-
 
         {/* Program Dropdown */}
         <View style={styles.inputSection}>
@@ -355,7 +315,6 @@ export default function EditProfileScreen() {
               color="#9CA3AF" 
             />
           </TouchableOpacity>
-
 
           {showProgramDropdown && (
             <View style={styles.dropdownMenu}>
@@ -384,7 +343,6 @@ export default function EditProfileScreen() {
           )}
         </View>
 
-
         {/* Bio Input */}
         <View style={styles.inputSection}>
           <Text style={styles.label}>Bio</Text>
@@ -412,7 +370,6 @@ export default function EditProfileScreen() {
           </View>
         </View>
 
-
         {/* Save Button */}
         <TouchableOpacity 
           style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
@@ -430,12 +387,10 @@ export default function EditProfileScreen() {
           )}
         </TouchableOpacity>
 
-
       </ScrollView>
     </View>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {

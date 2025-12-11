@@ -21,6 +21,7 @@ export const MainNavigator: React.FC = () => {
       id={undefined}
       screenOptions={{
         headerShown: false,
+        animation: 'fade',
       }}
       tabBar={() => null} // Assuming you have a custom BottomNav component handling the UI
     >

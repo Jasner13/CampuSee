@@ -25,6 +25,7 @@ import { FONTS } from '../../constants/fonts';
 import { CATEGORIES, CategoryType } from '../../constants/categories';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { Post as PostEntity } from '../../types';
 
 type HomeFeedScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Home'>,
@@ -63,18 +64,11 @@ export const HomeFeedScreen: React.FC = () => {
 
   const fetchPosts = async () => {
     try {
-      // FIX: Explicitly specify the foreign key constraint for profiles
       // 'profiles!posts_user_id_fkey' targets the author relationship
       let query = supabase
         .from('posts')
         .select(`
-          id, 
-          created_at, 
-          title, 
-          description, 
-          category, 
-          user_id, 
-          file_url, 
+          *,
           profiles:profiles!posts_user_id_fkey (full_name, avatar_url)
         `)
         .order('created_at', { ascending: false });
@@ -95,12 +89,15 @@ export const HomeFeedScreen: React.FC = () => {
       }
 
       if (data) {
-        const formattedPosts: Post[] = data.map((item: any) => ({
+        // Safe Cast to Central DB Type
+        const dbPosts = data as unknown as PostEntity[];
+
+        const formattedPosts: Post[] = dbPosts.map((item) => ({
           id: item.id,
           userId: item.user_id,
-          // We aliased it as 'profiles' in the query, so we access it as item.profiles
+          // Access joined profile data safely
           authorName: item.profiles?.full_name || 'Unknown User',
-          authorInitials: getInitials(item.profiles?.full_name),
+          authorInitials: getInitials(item.profiles?.full_name || null),
           authorAvatarUrl: item.profiles?.avatar_url,
           timestamp: getRelativeTime(item.created_at),
           label: item.category.charAt(0).toUpperCase() + item.category.slice(1),

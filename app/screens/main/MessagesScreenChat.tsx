@@ -8,17 +8,10 @@ import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Avatar } from '../../components/Avatar';
+import { Message } from '../../types';
 
 type MessagesScreenChatNavigationProp = NativeStackNavigationProp<RootStackParamList, 'MessagesChat'>;
 type MessagesScreenChatRouteProp = RouteProp<RootStackParamList, 'MessagesChat'>;
-
-interface Message {
-  id: string;
-  content: string;
-  sender_id: string;
-  receiver_id: string;
-  created_at: string;
-}
 
 export default function MessagesScreenChat() {
   const navigation = useNavigation<MessagesScreenChatNavigationProp>();
@@ -26,7 +19,6 @@ export default function MessagesScreenChat() {
   const { session } = useAuth();
 
   const { peerId, peerName, peerInitials, peerAvatarUrl } = route.params;
-
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -41,6 +33,7 @@ export default function MessagesScreenChat() {
   const fetchMessages = async () => {
     if (!session?.user) return;
 
+    // Fetch messages between me and the peer
     const { data, error } = await supabase
       .from('messages')
       .select('*')
@@ -48,8 +41,27 @@ export default function MessagesScreenChat() {
       .order('created_at', { ascending: true });
 
     if (!error && data) {
-      setMessages(data);
+      setMessages(data as Message[]);
       setLoading(false);
+    } else if (error) {
+      console.error('Error fetching messages:', error);
+      setLoading(false);
+    }
+  };
+
+  // Mark messages as read when we open the screen or receive new ones
+  const markAsRead = async () => {
+    if (!session?.user) return;
+
+    const { error } = await supabase
+      .from('messages')
+      .update({ is_read: true })
+      .eq('receiver_id', session.user.id) // Messages sent TO me
+      .eq('sender_id', peerId)          // Messages FROM this specific friend
+      .eq('is_read', false);            // Only currently unread ones
+
+    if (error) {
+      console.error('Error marking messages as read:', error);
     }
   };
 
@@ -57,6 +69,7 @@ export default function MessagesScreenChat() {
     fetchMessages();
     markAsRead();
 
+    // Subscribe to NEW messages where I am the receiver
     const channel = supabase
       .channel(`chat:${peerId}`)
       .on(
@@ -68,9 +81,10 @@ export default function MessagesScreenChat() {
           filter: `receiver_id=eq.${session?.user?.id}`
         },
         (payload) => {
+          // If the message is from the person I'm currently chatting with
           if (payload.new.sender_id === peerId) {
             setMessages((prev) => [...prev, payload.new as Message]);
-            markAsRead(); // Mark as read immediately if a new message pops in
+            markAsRead(); 
           }
         }
       )
@@ -81,6 +95,7 @@ export default function MessagesScreenChat() {
     };
   }, [peerId, session]);
 
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -92,7 +107,7 @@ export default function MessagesScreenChat() {
 
     setSending(true);
     const textToSend = messageText.trim();
-    setMessageText('');
+    setMessageText(''); // Clear input immediately for better UX
 
     try {
       const { data, error } = await supabase
@@ -108,30 +123,16 @@ export default function MessagesScreenChat() {
       if (error) throw error;
 
       if (data) {
-        setMessages((prev) => [...prev, data]);
+        setMessages((prev) => [...prev, data as Message]);
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      setMessageText(textToSend);
+      setMessageText(textToSend); // Restore text if failed
+      alert('Failed to send message');
     } finally {
       setSending(false);
     }
   };
-
-  const markAsRead = async () => {
-  if (!session?.user) return;
-
-  const { error } = await supabase
-    .from('messages')
-    .update({ is_read: true })
-    .eq('receiver_id', session.user.id) // Messages sent TO me
-    .eq('sender_id', peerId)          // Messages FROM this specific friend
-    .eq('is_read', false);            // Only update if currently unread
-
-  if (error) {
-    console.error('Error marking messages as read:', error);
-  }
-};
 
   const formatTime = (isoString: string) => {
     return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -157,13 +158,15 @@ export default function MessagesScreenChat() {
             <Avatar 
               initials={peerInitials} 
               avatarUrl={peerAvatarUrl} 
-              size="default" // ~54px usually, or adjust in Avatar.tsx if needed
+              size="default" 
             />
+            {/* Note: Real "Online Status" requires Supabase Presence (Advanced feature). 
+                Keeping the badge static or hidden for now is fine. */}
             <View style={styles.onlineBadge} />
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerName}>{peerName}</Text>
-            <Text style={styles.headerStatus}>Active now</Text>
+            <Text style={styles.headerStatus}>Active</Text>
           </View>
         </View>
       </View>
@@ -182,6 +185,7 @@ export default function MessagesScreenChat() {
           {messages.map((message, index) => {
             const isSentByMe = message.sender_id === session?.user?.id;
 
+            // Logic to group messages by time/sender to avoid repeating timestamps
             const showTimestamp = index === 0 ||
               new Date(messages[index - 1].created_at).getMinutes() !== new Date(message.created_at).getMinutes() ||
               messages[index - 1].sender_id !== message.sender_id;
