@@ -9,19 +9,21 @@ import {
   Image, 
   Alert,
   ActivityIndicator,
-  DeviceEventEmitter
+  DeviceEventEmitter,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import { Video, ResizeMode } from 'expo-av'; 
 import { COLORS } from '../../constants/colors';
 import { CATEGORIES, CategoryType } from '../../constants/categories';
 import { PostService } from '../../lib/postService';
 import { useAuth } from '../../contexts/AuthContext';
 import PrimaryButton from '../../components/buttons/PrimaryButton';
 
-// 1. UI Mapping to restore your original icons and colors
 const CATEGORY_UI: Record<string, { icon: string; color: string }> = {
   study:  { icon: '📚', color: '#667EEA' },
   items:  { icon: '🛍️', color: '#FBBF24' },
@@ -29,6 +31,9 @@ const CATEGORY_UI: Record<string, { icon: string; color: string }> = {
   favors: { icon: '💬', color: '#7B68EE' },
   default:{ icon: '🔖', color: COLORS.primary },
 };
+
+// STRICT LIMIT: 50MB (Supabase Free Plan Limit)
+const MAX_FILE_SIZE = 50 * 1024 * 1024; 
 
 export default function CreatePostScreen() {
   const navigation = useNavigation();
@@ -38,38 +43,117 @@ export default function CreatePostScreen() {
   const [description, setDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('study');
   
-  const [image, setImage] = useState<string | null>(null);
-  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [attachment, setAttachment] = useState<{
+    uri: string;
+    mimeType: string;
+    extension: string;
+    type: 'image' | 'video' | 'file';
+    name: string;
+    size?: number;
+  } | null>(null);
+
   const [loading, setLoading] = useState(false);
 
-  const pickImage = async () => {
+  // Helper to Validate Size
+  const validateSize = (size?: number) => {
+    if (size && size > MAX_FILE_SIZE) {
+      Alert.alert(
+        "File too large", 
+        `The File Limit is 50MB. Your file is ${(size / (1024 * 1024)).toFixed(1)}MB. Please trim it or choose a smaller file.`
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const pickMedia = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
     if (permissionResult.granted === false) {
-      Alert.alert("Permission Required", "You need to allow access to your photos to upload an image.");
+      Alert.alert("Permission Required", "Access to gallery is needed.");
       return;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
+      mediaTypes: ImagePicker.MediaTypeOptions.All, 
+      // ENABLE EDITING: Allows user to trim video to fit size limit
+      allowsEditing: true, 
       quality: 0.5, 
-      base64: true, 
+      // COMPRESSION: Request lower quality video to save space
+      videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
     });
 
     if (!result.canceled) {
-      setImage(result.assets[0].uri);
-      setImageBase64(result.assets[0].base64 || null);
+      const asset = result.assets[0];
+      
+      // Check Size (if available)
+      if (!validateSize(asset.fileSize)) return;
+
+      const type = asset.type === 'video' ? 'video' : 'image';
+      const uriParts = asset.uri.split('.');
+      const extension = uriParts[uriParts.length - 1];
+      
+      // Default mime types
+      const mimeType = type === 'video' ? 'video/mp4' : 'image/jpeg';
+
+      setAttachment({
+        uri: asset.uri,
+        mimeType: asset.mimeType || mimeType,
+        extension: extension,
+        type: type,
+        name: type === 'video' ? 'Video Attachment' : 'Image Attachment',
+        size: asset.fileSize
+      });
     }
+  };
+
+  const pickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets) {
+        const file = result.assets[0];
+        
+        // Check Size
+        if (!validateSize(file.size)) return;
+
+        const nameParts = file.name.split('.');
+        const extension = nameParts.length > 1 ? nameParts.pop()! : 'bin';
+
+        setAttachment({
+          uri: file.uri,
+          mimeType: file.mimeType || 'application/octet-stream',
+          extension: extension,
+          type: 'file',
+          name: file.name,
+          size: file.size
+        });
+      }
+    } catch (err) {
+      console.log('Document picker error', err);
+      Alert.alert("Error", "Failed to pick document.");
+    }
+  };
+
+  const handleAttachmentPress = () => {
+    Alert.alert(
+      "Add Attachment",
+      "Choose the type of file you want to upload",
+      [
+        { text: "Photo or Video", onPress: pickMedia },
+        { text: "Document / File", onPress: pickDocument },
+        { text: "Cancel", style: "cancel" }
+      ]
+    );
   };
 
   const resetForm = () => {
     setTitle('');
     setDescription('');
     setSelectedCategory('study');
-    setImage(null);
-    setImageBase64(null);
+    setAttachment(null);
   };
 
   const handleSubmit = async () => {
@@ -86,27 +170,31 @@ export default function CreatePostScreen() {
     setLoading(true);
 
     try {
+      // Pass the attachment object directly (PostService handles the rest)
       await PostService.createPost(
         session.user.id,
         title,
         description,
         selectedCategory,
-        imageBase64
+        attachment 
       );
 
-      // Notify Home to refresh
       DeviceEventEmitter.emit('post_updated');
+      resetForm(); 
       
-      // 2. Clear the form BEFORE navigating away
-      resetForm();
-
       Alert.alert('Success', 'Post created successfully!', [
         { text: 'OK', onPress: () => navigation.goBack() }
       ]);
       
     } catch (error: any) {
       console.error('Create post error:', error);
-      Alert.alert('Error', error.message || 'Failed to create post. Please try again.');
+      let msg = error.message || 'Failed to create post.';
+      
+      // Helpful error mapping
+      if (msg.includes('413')) msg = 'File is too large (Limit: 50MB).';
+      if (msg.includes('Network')) msg = 'Network error. Check your connection.';
+      
+      Alert.alert('Upload Failed', msg);
     } finally {
       setLoading(false);
     }
@@ -114,7 +202,6 @@ export default function CreatePostScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Kept NEW Header (Arrow Back) */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
@@ -137,14 +224,13 @@ export default function CreatePostScreen() {
           />
         </View>
 
-        {/* 2. Modified Category Section: Restored Icons & Colors */}
+        {/* Categories */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Category</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesRow}>
             {CATEGORIES.filter(c => c.type !== 'all').map((cat) => {
               const ui = CATEGORY_UI[cat.type] || CATEGORY_UI.default;
               const isSelected = selectedCategory === cat.type;
-              
               return (
                 <TouchableOpacity
                   key={cat.id}
@@ -157,7 +243,7 @@ export default function CreatePostScreen() {
                   <Text style={styles.categoryIcon}>{ui.icon}</Text>
                   <Text style={[
                     styles.categoryText,
-                    isSelected && { color: ui.color } // Restore original color logic
+                    isSelected && { color: ui.color }
                   ]}>
                     {cat.label}
                   </Text>
@@ -181,34 +267,63 @@ export default function CreatePostScreen() {
           />
         </View>
 
+        {/* Attachment */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Attachment</Text>
           
-          {image ? (
-            <View style={styles.imagePreviewContainer}>
-              <Image source={{ uri: image }} style={styles.imagePreview} />
+          {attachment ? (
+            <View style={styles.attachmentPreview}>
+              <View style={styles.fileInfo}>
+                {attachment.type === 'image' ? (
+                   <Image source={{ uri: attachment.uri }} style={styles.thumbImage} />
+                ) : attachment.type === 'video' ? (
+                   <View style={styles.thumbVideo}>
+                      <Video
+                        source={{ uri: attachment.uri }}
+                        style={{ width: '100%', height: '100%', borderRadius: 8 }}
+                        resizeMode={ResizeMode.COVER}
+                        shouldPlay={false}
+                        isMuted={true}
+                      />
+                      <View style={styles.playIconOverlay}>
+                        <Ionicons name="play" size={20} color="#FFF" />
+                      </View>
+                   </View>
+                ) : (
+                   <View style={styles.thumbIcon}>
+                      <Ionicons name="document-text" size={24} color={COLORS.primary} />
+                   </View>
+                )}
+                <View style={{flex: 1, marginLeft: 12}}>
+                    <Text style={styles.fileName} numberOfLines={1}>{attachment.name}</Text>
+                    <View style={{flexDirection: 'row', gap: 8}}>
+                        <Text style={styles.fileType}>{attachment.type.toUpperCase()}</Text>
+                        {attachment.size && (
+                            <Text style={styles.fileType}>{(attachment.size / (1024*1024)).toFixed(1)} MB</Text>
+                        )}
+                    </View>
+                </View>
+              </View>
               <TouchableOpacity 
-                style={styles.removeImageButton} 
-                onPress={() => { setImage(null); setImageBase64(null); }}
+                style={styles.removeButton} 
+                onPress={() => setAttachment(null)}
               >
-                <Ionicons name="close" size={20} color="#FFF" />
+                <Ionicons name="close" size={20} color={COLORS.textSecondary} />
               </TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity 
-              style={styles.attachmentBox}
-              onPress={pickImage}
+              style={styles.attachmentBox} 
+              onPress={handleAttachmentPress} 
               activeOpacity={0.7}
-              disabled={loading}
             >
               <View style={styles.attachmentIconContainer}>
-                {/* Changed from Emoji 📎 to Icon to match App Theme Color */}
                 <Ionicons name="cloud-upload-outline" size={32} color={COLORS.primary} />
               </View>
-              <Text style={styles.attachmentTitle}>Add Photo or File</Text>
-              <Text style={styles.attachmentSubtitle}>Tap to browse</Text>
+              <Text style={styles.attachmentTitle}>Add Attachment</Text>
+              <Text style={styles.attachmentSubtitle}>Photo, Video, or Document</Text>
               <View style={styles.browseButton}>
-                <Text style={styles.browseButtonText}>Browse Files</Text>
+                <Text style={styles.browseButtonText}>Browse</Text>
               </View>
             </TouchableOpacity>
           )}
@@ -254,41 +369,34 @@ const styles = StyleSheet.create({
   },
   textArea: { height: 120 },
   categoriesRow: { flexDirection: 'row' },
-  
-  // Updated Chip Styles to match original look
   categoryChip: {
-    flexDirection: 'row', // Added for icon
-    alignItems: 'center', // Added for icon
+    flexDirection: 'row', 
+    alignItems: 'center', 
     paddingHorizontal: 16,
-    paddingVertical: 10, // Increased padding
-    borderRadius: 24,    // More rounded
+    paddingVertical: 10,
+    borderRadius: 24, 
     backgroundColor: '#F1F5F9',
-    marginRight: 12,     // Increased margin
-    borderWidth: 1.5,    // Thicker border
+    marginRight: 12,
+    borderWidth: 1.5,
     borderColor: COLORS.border,
   },
   categoryChipSelected: {
-    backgroundColor: '#EEF2FF', // Keep selection background from new design (or adjust if needed)
-    borderColor: COLORS.primary, // Keep selection border
+    backgroundColor: '#EEF2FF',
+    borderColor: COLORS.primary,
   },
   categoryIcon: {
     fontSize: 18,
     marginRight: 8,
   },
   categoryText: { 
-    fontSize: 15, // Slightly larger
+    fontSize: 15,
     fontWeight: '600', 
     color: COLORS.textSecondary 
   },
-  categoryTextSelected: { 
-    color: COLORS.primary 
-  },
-
-  // Restored Attachment Styles
   attachmentBox: {
     backgroundColor: '#F8FAFC', 
     borderWidth: 2,
-    borderColor: '#E2E8F0', // Matches your input borders
+    borderColor: '#E2E8F0', 
     borderStyle: 'dashed',
     borderRadius: 16,
     padding: 32,
@@ -298,7 +406,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#EEF2FF', // Light Indigo (matches selected category theme)
+    backgroundColor: '#EEF2FF', 
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
@@ -315,7 +423,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   browseButton: {
-    backgroundColor: COLORS.primary, // Changed from Green to App Primary Color
+    backgroundColor: COLORS.primary, 
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 10,
@@ -325,24 +433,59 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
-  imagePreviewContainer: {
-    position: 'relative',
-    width: '100%',
-    height: 200,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  imagePreview: { width: '100%', height: '100%' },
-  removeImageButton: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 15,
-    width: 30,
-    height: 30,
+  attachmentPreview: {
+    flexDirection: 'row',
     alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  thumbImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+  },
+  thumbVideo: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#000',
+    position: 'relative',
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playIconOverlay: {
+    position: 'absolute',
+    opacity: 0.8,
+  },
+  thumbIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fileInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  fileName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  fileType: {
+    fontSize: 12,
+    color: COLORS.textTertiary,
+    marginTop: 2,
+  },
+  removeButton: {
+    padding: 8,
   },
   footer: { marginTop: 20, marginBottom: 50 },
   buttonText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },

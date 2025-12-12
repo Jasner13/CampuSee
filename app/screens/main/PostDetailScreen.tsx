@@ -29,6 +29,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Avatar } from '../../components/Avatar';
 import { Comment } from '../../types';
 import { CategoryBadge } from '../../components/CategoryBadge';
+import { Video, ResizeMode } from 'expo-av';
 
 type PostDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'PostDetails'>;
 type PostDetailScreenRouteProp = RouteProp<RootStackParamList, 'PostDetails'>;
@@ -399,11 +400,10 @@ export default function PostDetailScreen() {
         </View>
         )}
 
-        {/* --- CHANGED: Display Image directly if it's an image --- */}
+        {/* Media Display */}
         {post.fileUrl && !isEditing && (
             <View style={styles.mediaContainer}>
                 {isImage ? (
-                    // 1. Show Image directly
                     <TouchableOpacity onPress={() => setImageModalVisible(true)} activeOpacity={0.9}>
                         <Image 
                             source={{ uri: post.fileUrl }} 
@@ -411,8 +411,17 @@ export default function PostDetailScreen() {
                             resizeMode="cover" 
                         />
                     </TouchableOpacity>
+                ) : post.fileType === 'video' || /\.(mp4|mov|avi)$/i.test(post.fileUrl) ? (
+                    // Video Player
+                    <Video
+                        style={styles.postImage} // Reusing image style for size
+                        source={{ uri: post.fileUrl }}
+                        useNativeControls
+                        resizeMode={ResizeMode.CONTAIN}
+                        isLooping
+                    />
                 ) : (
-                    // 2. Fallback to Attachment Box for non-images (PDFs, etc.)
+                    // File Fallback
                     <TouchableOpacity style={styles.attachment} onPress={handleViewAttachment} activeOpacity={0.7}>
                         <View style={styles.attachmentIcon}>
                             <Ionicons name="document-text" size={24} color="#5C6BC0" />

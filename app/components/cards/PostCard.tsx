@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -10,6 +10,7 @@ import {
   Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Video, ResizeMode } from 'expo-av'; // Import Video
 import { Avatar } from '../Avatar';
 import { CategoryBadge } from '../CategoryBadge';
 import { COLORS } from '../../constants/colors';
@@ -18,9 +19,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { PostService } from '../../lib/postService';
 
-// Get screen width to calculate image aspect ratio if needed
-const { width } = Dimensions.get('window');
-
+// ... (Keep existing interface Post) ...
 export interface Post {
   id: string;
   userId: string;
@@ -33,7 +32,7 @@ export interface Post {
   description: string;
   category?: string;
   fileUrl?: string | null;
-  fileType?: string | null; // Added to check if it's image/video
+  fileType?: string | null; 
   likesCount?: number;
   commentsCount?: number;
 }
@@ -48,17 +47,16 @@ interface PostCardProps {
 export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePress, onSharePress }) => {
   const { session } = useAuth();
   const currentUserId = session?.user?.id;
+  const videoRef = useRef<Video>(null);
 
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likesCount || 0);
 
-  // Helper to determine if we can show a preview
-  // Checks if fileUrl exists and if the fileType (from DB) is 'image' OR if the extension looks like an image
-  const isImage = post.fileUrl && (
-      post.fileType === 'image' || 
-      /\.(jpg|jpeg|png|gif|webp)$/i.test(post.fileUrl)
-  );
+  // Helper logic
+  const isImage = post.fileType === 'image' || (post.fileUrl && /\.(jpg|jpeg|png|gif|webp)$/i.test(post.fileUrl));
+  const isVideo = post.fileType === 'video' || (post.fileUrl && /\.(mp4|mov|avi)$/i.test(post.fileUrl));
 
+  // ... (Keep useEffects and fetchLikeStatus and handleLike logic as is) ...
   useEffect(() => {
     fetchLikeStatus();
   }, [post.id, currentUserId]);
@@ -147,29 +145,37 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
           <Text style={styles.description} numberOfLines={3}>{post.description}</Text>
         </View>
 
-        {/* Media Content (The Change) */}
+        {/* Media Content */}
         {post.fileUrl && (
           <View style={styles.mediaContainer}>
             {isImage ? (
-              // 1. If it's an image, show it directly
               <Image 
                 source={{ uri: post.fileUrl }} 
                 style={styles.postImage}
                 resizeMode="cover"
               />
+            ) : isVideo ? (
+              <Video
+                ref={videoRef}
+                style={styles.postVideo}
+                source={{ uri: post.fileUrl }}
+                useNativeControls
+                resizeMode={ResizeMode.COVER}
+                isLooping={false}
+              />
             ) : (
-              // 2. If it's a file/audio/video (future proofing), keep the attachment box style for now
+              // Document Fallback (Non-previewable but actionable)
               <View style={styles.attachmentBox}>
                  <View style={styles.attachmentIcon}>
                     <Ionicons name="document-text-outline" size={24} color={COLORS.primary} />
                  </View>
-                 <Text style={styles.attachmentText}>Attachment</Text>
+                 <Text style={styles.attachmentText}>Attached File (Tap to view)</Text>
               </View>
             )}
           </View>
         )}
         
-        {/* Stats Row */}
+        {/* Stats Row & Footer (Keep Existing) */}
         <View style={styles.statsRow}>
             <View style={styles.statsLeft}>
                 {likesCount > 0 && (
@@ -185,7 +191,6 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
 
         <View style={styles.divider} />
 
-        {/* Action Buttons */}
         <View style={styles.footer}>
             <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
                 <Ionicons 
@@ -212,10 +217,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
 };
 
 const styles = StyleSheet.create({
-  cardContainer: {
-    marginBottom: 16,
-    zIndex: 10, 
-  },
+  // ... (Keep existing container, header, etc. styles) ...
+  cardContainer: { marginBottom: 16, zIndex: 10 },
   cardInner: {
     backgroundColor: COLORS.backgroundLight,
     borderRadius: 24,
@@ -228,53 +231,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(226, 232, 240, 0.6)',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  headerText: {
-    flex: 1,
-    marginLeft: 12,
-    justifyContent: 'center',
-  },
-  authorName: {
-    fontSize: FONTS.sizes.md,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    marginBottom: 2,
-  },
-  timestamp: {
-    fontSize: FONTS.sizes.xs,
-    color: COLORS.textTertiary,
-    fontWeight: '500',
-  },
-  content: {
-    marginBottom: 14,
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: COLORS.textPrimary,
-    marginBottom: 6,
-    lineHeight: 24,
-  },
-  description: {
-    fontSize: 15,
-    color: COLORS.textSecondary,
-    lineHeight: 22,
-    fontWeight: '400',
-  },
-  // New Media Styles
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  headerText: { flex: 1, marginLeft: 12, justifyContent: 'center' },
+  authorName: { fontSize: FONTS.sizes.md, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 2 },
+  timestamp: { fontSize: FONTS.sizes.xs, color: COLORS.textTertiary, fontWeight: '500' },
+  content: { marginBottom: 14 },
+  title: { fontSize: 17, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 6, lineHeight: 24 },
+  description: { fontSize: 15, color: COLORS.textSecondary, lineHeight: 22, fontWeight: '400' },
+  
+  // Media Styles
   mediaContainer: {
     marginBottom: 14,
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#F1F5F9', // Placeholder color while loading
+    backgroundColor: '#F1F5F9',
   },
   postImage: {
     width: '100%',
-    height: 250, // Fixed height for feed consistency
+    height: 250,
+  },
+  postVideo: {
+    width: '100%',
+    height: 250,
   },
   attachmentBox: {
     flexDirection: 'row',
@@ -296,38 +274,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.textSecondary,
   },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, paddingHorizontal: 4 },
   statsLeft: {},
   statsRight: {},
-  statsText: {
-    fontSize: 12,
-    color: COLORS.textTertiary,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#F1F5F9',
-    marginBottom: 12,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-  },
-  actionText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.textTertiary,
-  },
+  statsText: { fontSize: 12, color: COLORS.textTertiary },
+  divider: { height: 1, backgroundColor: '#F1F5F9', marginBottom: 12 },
+  footer: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 },
+  actionButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 8 },
+  actionText: { fontSize: 13, fontWeight: '600', color: COLORS.textTertiary },
 });
