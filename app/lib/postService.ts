@@ -7,42 +7,31 @@ export type ReactionType = 'like' | 'love' | 'haha' | 'wow' | 'sad' | 'angry';
 
 export const PostService = {
   /**
-   * Uploads file using native FileSystem upload (No OOM errors for large files).
+   * Uploads file using native FileSystem upload.
    */
   async uploadFile(uri: string, userId: string, mimeType: string, extension: string) {
-    if (!SUPABASE_URL) {
-        throw new Error('Supabase configuration missing');
-    }
+    if (!SUPABASE_URL) throw new Error('Supabase configuration missing');
 
-    // 1. Get the User's Session Token (CRITICAL FIX)
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-        throw new Error('User not authenticated. Cannot upload.');
-    }
+    if (!session?.access_token) throw new Error('User not authenticated.');
 
-    // 2. Prepare Path: userID/timestamp.extension
     const fileName = `${userId}/${Date.now()}.${extension}`;
-    // Ensure the URL matches your Supabase project structure exactly
     const targetUrl = `${SUPABASE_URL}/storage/v1/object/post_attachments/${fileName}`;
 
-    // 3. Native Upload with User Token
     const response = await FileSystem.uploadAsync(targetUrl, uri, {
         httpMethod: 'POST',
         uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
         headers: {
-            // FIX: Use the User's Token, not the Anon Key
             Authorization: `Bearer ${session.access_token}`, 
             'Content-Type': mimeType,
         },
     });
 
-    // 4. Handle Result
     if (response.status !== 200) {
         console.error('Upload failed:', response.body);
         throw new Error('Failed to upload file to storage.');
     }
 
-    // 5. Get Public URL
     const { data: urlData } = supabase.storage
       .from('post_attachments')
       .getPublicUrl(fileName);
@@ -50,9 +39,6 @@ export const PostService = {
     return urlData.publicUrl;
   },
 
-  /**
-   * Creates a new post with optional file attachment.
-   */
   async createPost(
     userId: string,
     title: string,
@@ -64,14 +50,12 @@ export const PostService = {
     let fileType = null;
     let fileName = null;
 
-    // 1. Upload Attachment if exists
     if (attachment) {
       fileUrl = await this.uploadFile(attachment.uri, userId, attachment.mimeType, attachment.extension);
       fileType = attachment.type;
-      fileName = attachment.name; // Capture the original name
+      fileName = attachment.name;
     }
 
-    // 2. Insert Post Data
     const { data, error } = await supabase
       .from('posts')
       .insert({
@@ -89,8 +73,6 @@ export const PostService = {
     if (error) throw error;
     return data;
   },
-
-  // --- Existing Interaction Methods ---
 
   async handleReaction(postId: string, userId: string, reactionType: ReactionType = 'like') {
     const { data: existing, error: fetchError } = await supabase
@@ -126,14 +108,53 @@ export const PostService = {
     }
   },
 
-  async addComment(postId: string, userId: string, content: string) {
-    const { data, error } = await supabase.from('comments').insert({ post_id: postId, user_id: userId, content }).select('*, profiles(*)').single();
+  // UPDATED: Supports parentId for replies
+  async addComment(postId: string, userId: string, content: string, parentId: string | null = null) {
+    const { data, error } = await supabase
+      .from('comments')
+      .insert({ 
+        post_id: postId, 
+        user_id: userId, 
+        content,
+        parent_id: parentId // Added parent_id
+      })
+      .select('*, profiles(id, full_name, avatar_url, program)')
+      .single();
+      
     if (error) throw error;
     return data;
   },
 
+  // NEW: Update existing comment
+  async updateComment(commentId: string, content: string) {
+    const { data, error } = await supabase
+      .from('comments')
+      .update({ content, is_edited: true }) // Assuming you added is_edited column
+      .eq('id', commentId)
+      .select('*, profiles(id, full_name, avatar_url, program)')
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+  
+  // NEW: Delete comment
+  async deleteComment(commentId: string) {
+    const { error } = await supabase
+      .from('comments')
+      .delete()
+      .eq('id', commentId);
+
+    if (error) throw error;
+  },
+
   async getComments(postId: string) {
-    const { data, error } = await supabase.from('comments').select('*, profiles(*)').eq('post_id', postId).order('created_at', { ascending: true });
+    const { data, error } = await supabase
+      .from('comments')
+      .select('*, profiles(id, full_name, avatar_url, program)')
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true });
+      
     if (error) throw error;
     return data;
   }
