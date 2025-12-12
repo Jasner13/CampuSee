@@ -110,7 +110,8 @@ export const HomeFeedScreen: React.FC = () => {
           description: item.description,
           category: item.category,
           fileUrl: item.file_url,
-          // Map counts from Supabase response
+          fileType: item.file_type,
+          fileName: item.file_name,
           likesCount: item.post_likes?.[0]?.count || 0,
           commentsCount: item.comments?.[0]?.count || 0,
         }));

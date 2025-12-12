@@ -10,7 +10,7 @@ import {
   Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Video, ResizeMode } from 'expo-av'; // Import Video
+import { Video, ResizeMode } from 'expo-av'; 
 import { Avatar } from '../Avatar';
 import { CategoryBadge } from '../CategoryBadge';
 import { COLORS } from '../../constants/colors';
@@ -19,7 +19,6 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { PostService } from '../../lib/postService';
 
-// ... (Keep existing interface Post) ...
 export interface Post {
   id: string;
   userId: string;
@@ -33,6 +32,7 @@ export interface Post {
   category?: string;
   fileUrl?: string | null;
   fileType?: string | null; 
+  fileName?: string | null;
   likesCount?: number;
   commentsCount?: number;
 }
@@ -47,16 +47,17 @@ interface PostCardProps {
 export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePress, onSharePress }) => {
   const { session } = useAuth();
   const currentUserId = session?.user?.id;
+  
+  // Ref for video player
   const videoRef = useRef<Video>(null);
 
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likesCount || 0);
 
-  // Helper logic
+  // Robust check for media types
   const isImage = post.fileType === 'image' || (post.fileUrl && /\.(jpg|jpeg|png|gif|webp)$/i.test(post.fileUrl));
   const isVideo = post.fileType === 'video' || (post.fileUrl && /\.(mp4|mov|avi)$/i.test(post.fileUrl));
 
-  // ... (Keep useEffects and fetchLikeStatus and handleLike logic as is) ...
   useEffect(() => {
     fetchLikeStatus();
   }, [post.id, currentUserId]);
@@ -121,7 +122,6 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
           activeOpacity={0.9} 
           style={styles.cardInner}
       >
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => onProfilePress && onProfilePress(post.userId)}>
             <Avatar 
@@ -139,13 +139,12 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
           <CategoryBadge category={post.category || 'default'} />
         </View>
 
-        {/* Text Content */}
         <View style={styles.content}>
           <Text style={styles.title} numberOfLines={2}>{post.title}</Text>
           <Text style={styles.description} numberOfLines={3}>{post.description}</Text>
         </View>
 
-        {/* Media Content */}
+        {/* --- UPDATED MEDIA SECTION --- */}
         {post.fileUrl && (
           <View style={styles.mediaContainer}>
             {isImage ? (
@@ -164,18 +163,22 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
                 isLooping={false}
               />
             ) : (
-              // Document Fallback (Non-previewable but actionable)
+              // Document View
               <View style={styles.attachmentBox}>
                  <View style={styles.attachmentIcon}>
                     <Ionicons name="document-text-outline" size={24} color={COLORS.primary} />
                  </View>
-                 <Text style={styles.attachmentText}>Attached File (Tap to view)</Text>
+                 <View style={{flex: 1}}>
+                    <Text style={styles.attachmentText} numberOfLines={1}>
+                        {post.fileName || 'Attached File'}
+                    </Text>
+                    <Text style={styles.attachmentSubText}>Tap to view</Text>
+                 </View>
               </View>
             )}
           </View>
         )}
         
-        {/* Stats Row & Footer (Keep Existing) */}
         <View style={styles.statsRow}>
             <View style={styles.statsLeft}>
                 {likesCount > 0 && (
@@ -217,7 +220,6 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
 };
 
 const styles = StyleSheet.create({
-  // ... (Keep existing container, header, etc. styles) ...
   cardContainer: { marginBottom: 16, zIndex: 10 },
   cardInner: {
     backgroundColor: COLORS.backgroundLight,
@@ -253,6 +255,7 @@ const styles = StyleSheet.create({
   postVideo: {
     width: '100%',
     height: 250,
+    backgroundColor: '#000',
   },
   attachmentBox: {
     flexDirection: 'row',
@@ -272,7 +275,11 @@ const styles = StyleSheet.create({
   attachmentText: {
     fontSize: 14,
     fontWeight: '600',
-    color: COLORS.textSecondary,
+    color: COLORS.textPrimary, // Darker text for readability
+  },
+  attachmentSubText: {
+    fontSize: 12,
+    color: COLORS.textTertiary,
   },
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, paddingHorizontal: 4 },
   statsLeft: {},

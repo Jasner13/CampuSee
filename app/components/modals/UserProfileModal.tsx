@@ -142,6 +142,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
           description: post.description,
           category: post.category,
           fileUrl: post.file_url,
+          fileName: post.file_name,
+          fileType: post.file_type,
       };
 
       navigation.navigate('PostDetails', { post: formattedPost });

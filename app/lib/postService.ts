@@ -51,23 +51,24 @@ export const PostService = {
   },
 
   /**
-   * Creates a new post.
-   * Expects attachment to have a 'uri' (base64 is no longer needed).
+   * Creates a new post with optional file attachment.
    */
   async createPost(
     userId: string,
     title: string,
     description: string,
     category: string,
-    attachment?: { uri: string; mimeType: string; extension: string; type: 'image' | 'video' | 'file' } | null
+    attachment?: { uri: string; mimeType: string; extension: string; type: 'image' | 'video' | 'file'; name: string } | null
   ) {
     let fileUrl = null;
     let fileType = null;
+    let fileName = null;
 
     // 1. Upload Attachment if exists
     if (attachment) {
       fileUrl = await this.uploadFile(attachment.uri, userId, attachment.mimeType, attachment.extension);
       fileType = attachment.type;
+      fileName = attachment.name; // Capture the original name
     }
 
     // 2. Insert Post Data
@@ -80,6 +81,7 @@ export const PostService = {
         category,
         file_url: fileUrl,
         file_type: fileType, 
+        file_name: fileName,
       })
       .select()
       .single();

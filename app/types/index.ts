@@ -62,8 +62,8 @@ export interface Post {
     category: string;
     file_url: string | null;
     file_type: string | null;
+    file_name: string | null;
     profiles?: Profile;
-    // Added counts for UI
     likes_count?: number;
     comments_count?: number;
 }
