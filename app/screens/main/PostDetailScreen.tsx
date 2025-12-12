@@ -21,7 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as WebBrowser from 'expo-web-browser';
-import { Video, ResizeMode } from 'expo-av'; // Ensure Video is imported
+import { Video, ResizeMode } from 'expo-av';
 import type { RootStackParamList } from '../../navigation/types';
 import { GRADIENTS, COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
@@ -31,7 +31,10 @@ import { Avatar } from '../../components/Avatar';
 import { Comment } from '../../types';
 import { CategoryBadge } from '../../components/CategoryBadge';
 
-type PostDetailScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'PostDetails'>;
+type PostDetailScreenNavigationProp = NativeStackNavigationProp<
+  RootStackParamList, 
+  'PostDetails'
+>;
 type PostDetailScreenRouteProp = RouteProp<RootStackParamList, 'PostDetails'>;
 
 export default function PostDetailScreen() {
@@ -63,13 +66,20 @@ export default function PostDetailScreen() {
   // Image Viewer State
   const [imageModalVisible, setImageModalVisible] = useState(false);
 
-  // --- FIX: Logic to prioritize the real filename ---
-  // If post.fileName exists (from DB), use it. Otherwise, fallback to parsing the URL.
-  const displayFileName = (post as any).fileName || (post.fileUrl ? decodeURIComponent(post.fileUrl).split('/').pop() : 'Attachment');
+  // File name logic: prioritize real filename from DB
+  const displayFileName = 
+    (post as any).fileName || 
+    (post.fileUrl ? decodeURIComponent(post.fileUrl).split('/').pop() : 'Attachment');
 
-  // Logic to identify media type
-  const isImage = (post as any).fileType === 'image' || (post.fileUrl && /\.(jpg|jpeg|png|gif|webp|heic)$/i.test(post.fileUrl));
-  const isVideo = (post as any).fileType === 'video' || (post.fileUrl && /\.(mp4|mov|avi)$/i.test(post.fileUrl));
+  // Media type detection
+  const isImage = 
+    (post as any).fileType === 'image' || 
+    (post.fileUrl && /\.(jpg|jpeg|png|gif|webp|heic)$/i.test(post.fileUrl));
+  
+  const isVideo = 
+    (post as any).fileType === 'video' || 
+    (post.fileUrl && /\.(mp4|mov|avi)$/i.test(post.fileUrl));
+  
   const isOwner = currentUserId === post.userId;
 
   // --- Initial Data Fetching ---
@@ -117,6 +127,7 @@ export default function PostDetailScreen() {
       .eq('post_id', post.id)
       .eq('user_id', currentUserId)
       .single();
+    
     setIsLiked(!!likeData);
 
     // Check Save
@@ -126,11 +137,11 @@ export default function PostDetailScreen() {
       .eq('post_id', post.id)
       .eq('user_id', currentUserId)
       .single();
+    
     setIsSaved(!!saveData);
   };
 
   // --- Handlers ---
-
   const handleBack = () => navigation.goBack();
 
   const handleLike = async () => {
@@ -143,21 +154,30 @@ export default function PostDetailScreen() {
 
     try {
       if (previousLiked) {
-        const { error } = await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', currentUserId);
+        const { error } = await supabase
+          .from('post_likes')
+          .delete()
+          .eq('post_id', post.id)
+          .eq('user_id', currentUserId);
+        
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('post_likes').insert({ post_id: post.id, user_id: currentUserId });
+        const { error } = await supabase
+          .from('post_likes')
+          .insert({ post_id: post.id, user_id: currentUserId });
+        
         if (error) throw error;
 
+        // Send notification if not the post owner
         if (post.userId !== currentUserId) {
-            await supabase.from('notifications').insert({
-                user_id: post.userId, 
-                actor_id: currentUserId, 
-                type: 'like',
-                title: 'New Like',
-                content: 'Someone liked your post.',
-                is_read: false
-            });
+          await supabase.from('notifications').insert({
+            user_id: post.userId, 
+            actor_id: currentUserId, 
+            type: 'like',
+            title: 'New Like',
+            content: 'Someone liked your post.',
+            is_read: false
+          });
         }
       }
     } catch (error) {
@@ -169,20 +189,29 @@ export default function PostDetailScreen() {
 
   const handleSave = async () => {
     if (!currentUserId) return;
+    
     const previousSaved = isSaved;
     setIsSaved(!isSaved);
 
     try {
-        if (previousSaved) {
-            const { error } = await supabase.from('saved_posts').delete().eq('post_id', post.id).eq('user_id', currentUserId);
-            if (error) throw error;
-        } else {
-            const { error } = await supabase.from('saved_posts').insert({ post_id: post.id, user_id: currentUserId });
-            if (error) throw error;
-        }
+      if (previousSaved) {
+        const { error } = await supabase
+          .from('saved_posts')
+          .delete()
+          .eq('post_id', post.id)
+          .eq('user_id', currentUserId);
+        
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('saved_posts')
+          .insert({ post_id: post.id, user_id: currentUserId });
+        
+        if (error) throw error;
+      }
     } catch (error) {
-        console.error('Save error:', error);
-        setIsSaved(previousSaved);
+      console.error('Save error:', error);
+      setIsSaved(previousSaved);
     }
   };
 
@@ -194,9 +223,9 @@ export default function PostDetailScreen() {
       const { data, error } = await supabase
         .from('comments')
         .insert({
-            post_id: post.id,
-            user_id: currentUserId,
-            content: commentText.trim()
+          post_id: post.id,
+          user_id: currentUserId,
+          content: commentText.trim()
         })
         .select('*, profiles(id, full_name, avatar_url, program)')
         .single();
@@ -206,17 +235,17 @@ export default function PostDetailScreen() {
       setComments(prev => [...prev, data as Comment]);
       setCommentText('');
 
+      // Send notification if not the post owner
       if (post.userId !== currentUserId) {
         await supabase.from('notifications').insert({
-            user_id: post.userId,
-            actor_id: currentUserId,
-            type: 'comment',
-            title: 'New Comment',
-            content: `Commented: ${commentText.trim().substring(0, 50)}...`,
-            is_read: false
+          user_id: post.userId,
+          actor_id: currentUserId,
+          type: 'comment',
+          title: 'New Comment',
+          content: `Commented: ${commentText.trim().substring(0, 50)}...`,
+          is_read: false
         });
       }
-
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to post comment.');
     } finally {
@@ -229,7 +258,11 @@ export default function PostDetailScreen() {
     setIsDeleting(true);
 
     try {
-      const { error } = await supabase.from('posts').delete().eq('id', post.id);
+      const { error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', post.id);
+      
       if (error) throw error;
       
       DeviceEventEmitter.emit('post_updated');
@@ -246,18 +279,27 @@ export default function PostDetailScreen() {
       Alert.alert('Validation Error', 'Title and description cannot be empty.');
       return;
     }
+    
     setIsSaving(true);
     try {
       const { data, error } = await supabase
         .from('posts')
-        .update({ title: editTitle.trim(), description: editDescription.trim() })
+        .update({ 
+          title: editTitle.trim(), 
+          description: editDescription.trim() 
+        })
         .eq('id', post.id)
         .select()
         .single();
 
       if (error) throw error;
 
-      setPost(prev => ({ ...prev, title: data.title, description: data.description }));
+      setPost(prev => ({ 
+        ...prev, 
+        title: data.title, 
+        description: data.description 
+      }));
+      
       setIsEditing(false);
       DeviceEventEmitter.emit('post_updated');
       Alert.alert('Success', 'Post updated successfully');
@@ -271,226 +313,282 @@ export default function PostDetailScreen() {
   const handleMore = () => {
     if (isOwner) {
       Alert.alert('Manage Post', 'Choose an action', [
-        { text: 'Edit', onPress: () => {
+        { 
+          text: 'Edit', 
+          onPress: () => {
             setEditTitle(post.title);
             setEditDescription(post.description);
             setIsEditing(true);
-        }},
-        { text: 'Delete', style: 'destructive', onPress: () => Alert.alert('Confirm', 'Are you sure?', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete', style: 'destructive', onPress: deletePost }
-        ])},
+          }
+        },
+        { 
+          text: 'Delete', 
+          style: 'destructive', 
+          onPress: () => Alert.alert(
+            'Confirm', 
+            'Are you sure?', 
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Delete', style: 'destructive', onPress: deletePost }
+            ]
+          )
+        },
         { text: 'Cancel', style: 'cancel' }
       ]);
     } else {
-       Alert.alert('Options', 'Select an action', [
-           { text: 'Report Post', onPress: () => console.log('Reported') },
-           { text: 'Cancel', style: 'cancel' }
-       ]);
+      Alert.alert('Options', 'Select an action', [
+        { text: 'Report Post', onPress: () => console.log('Reported') },
+        { text: 'Cancel', style: 'cancel' }
+      ]);
     }
   };
 
   const handleViewAttachment = async () => {
     if (!post.fileUrl) return;
+    
     try {
-        await WebBrowser.openBrowserAsync(post.fileUrl);
+      await WebBrowser.openBrowserAsync(post.fileUrl);
     } catch (err) {
-        Alert.alert('Error', 'Could not open the file.');
+      Alert.alert('Error', 'Could not open the file.');
     }
   };
 
   const handleSendPrivateMessage = () => {
     navigation.navigate('MessagesChat', {
-        peerId: post.userId,
-        peerName: post.authorName,
-        peerInitials: post.authorInitials,
-        peerAvatarUrl: post.authorAvatarUrl,
+      peerId: post.userId,
+      peerName: post.authorName,
+      peerInitials: post.authorInitials,
+      peerAvatarUrl: post.authorAvatarUrl,
     });
   };
 
   // --- Render Components ---
-
   const renderHeader = () => (
     <View style={styles.postCard}>
-        <View style={styles.authorSection}>
-            <View style={{ marginRight: 12 }}>
-                <Avatar initials={post.authorInitials} avatarUrl={post.authorAvatarUrl} size="default" />
-            </View>
-
-            <View style={styles.authorInfo}>
-                <Text style={styles.authorName}>{post.authorName}</Text>
-                <Text style={styles.timestamp}>{post.timestamp}</Text>
-            </View>
-            
-            <CategoryBadge category={post.category || 'default'} />
+      <View style={styles.authorSection}>
+        <View style={{ marginRight: 12 }}>
+          <Avatar 
+            initials={post.authorInitials} 
+            avatarUrl={post.authorAvatarUrl} 
+            size="default" 
+          />
         </View>
 
-        {isEditing ? (
+        <View style={styles.authorInfo}>
+          <Text style={styles.authorName}>{post.authorName}</Text>
+          <Text style={styles.timestamp}>{post.timestamp}</Text>
+        </View>
+        
+        <CategoryBadge category={post.category || 'default'} />
+      </View>
+
+      {isEditing ? (
         <TextInput
-            style={styles.editTitleInput}
-            value={editTitle}
-            onChangeText={setEditTitle}
-            placeholder="Post Title"
-            placeholderTextColor={COLORS.textTertiary}
+          style={styles.editTitleInput}
+          value={editTitle}
+          onChangeText={setEditTitle}
+          placeholder="Post Title"
+          placeholderTextColor={COLORS.textTertiary}
         />
-        ) : (
+      ) : (
         <Text style={styles.postTitle}>{post.title}</Text>
-        )}
+      )}
 
-        {isEditing ? (
-            <TextInput
-            style={styles.editDescInput}
-            value={editDescription}
-            onChangeText={setEditDescription}
-            placeholder="What's on your mind?"
-            placeholderTextColor={COLORS.textTertiary}
-            multiline
+      {isEditing ? (
+        <TextInput
+          style={styles.editDescInput}
+          value={editDescription}
+          onChangeText={setEditDescription}
+          placeholder="What's on your mind?"
+          placeholderTextColor={COLORS.textTertiary}
+          multiline
         />
-        ) : (
+      ) : (
         <Text style={styles.postDescription}>{post.description}</Text>
-        )}
+      )}
 
-        {isEditing && (
+      {isEditing && (
         <View style={styles.editButtonsRow}>
-            <TouchableOpacity 
-                style={[styles.editButton, styles.cancelButton]} 
-                onPress={() => setIsEditing(false)}
-                disabled={isSaving}
-            >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-                style={[styles.editButton, styles.saveButton]} 
-                onPress={savePostEdit}
-                disabled={isSaving}
-            >
-                {isSaving ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.saveButtonText}>Save</Text>}
-            </TouchableOpacity>
-        </View>
-        )}
-
-        {/* --- Media Display Logic --- */}
-        {post.fileUrl && !isEditing && (
-            <View style={styles.mediaContainer}>
-                {isImage ? (
-                    <TouchableOpacity onPress={() => setImageModalVisible(true)} activeOpacity={0.9}>
-                        <Image 
-                            source={{ uri: post.fileUrl }} 
-                            style={styles.postImage} 
-                            resizeMode="cover" 
-                        />
-                    </TouchableOpacity>
-                ) : isVideo ? (
-                    // Show Video Player
-                    <Video
-                        style={styles.postImage} 
-                        source={{ uri: post.fileUrl }}
-                        useNativeControls
-                        resizeMode={ResizeMode.CONTAIN}
-                        isLooping
-                    />
-                ) : (
-                    // Show File Attachment with REAL Name
-                    <TouchableOpacity style={styles.attachment} onPress={handleViewAttachment} activeOpacity={0.7}>
-                        <View style={styles.attachmentIcon}>
-                            <Ionicons name="document-text" size={24} color="#5C6BC0" />
-                        </View>
-                        <View style={styles.attachmentInfo}>
-                            <Text style={styles.attachmentName} numberOfLines={1}>{displayFileName}</Text>
-                            <Text style={styles.attachmentSize}>Tap to open file</Text>
-                        </View>
-                    </TouchableOpacity>
-                )}
-            </View>
-        )}
-
-        {!isEditing && (
-        <>
-            {!isOwner && (
-                <TouchableOpacity style={styles.messageButton} onPress={handleSendPrivateMessage} activeOpacity={0.8}>
-                    <LinearGradient
-                        colors={GRADIENTS.primary}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={styles.messageButtonGradient}
-                    >
-                        <Ionicons name="chatbubble-ellipses" size={20} color="#FFF" style={{marginRight: 8}} />
-                        <Text style={styles.messageButtonText}>Send Private Message</Text>
-                    </LinearGradient>
-                </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.editButton, styles.cancelButton]} 
+            onPress={() => setIsEditing(false)}
+            disabled={isSaving}
+          >
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.editButton, styles.saveButton]} 
+            onPress={savePostEdit}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <ActivityIndicator color="#FFF" size="small" />
+            ) : (
+              <Text style={styles.saveButtonText}>Save</Text>
             )}
+          </TouchableOpacity>
+        </View>
+      )}
 
-            <View style={styles.statsRow}>
-                <TouchableOpacity style={styles.statItem} onPress={handleLike} activeOpacity={0.7}>
-                    <Ionicons 
-                        name={isLiked ? "heart" : "heart-outline"} 
-                        size={20} 
-                        color={isLiked ? COLORS.error : "#9EA3AE"} 
-                    />
-                    <Text style={styles.statNumber}>{likesCount}</Text>
-                </TouchableOpacity>
+      {/* Media Display Logic */}
+      {post.fileUrl && !isEditing && (
+        <View style={styles.mediaContainer}>
+          {isImage ? (
+            <TouchableOpacity 
+              onPress={() => setImageModalVisible(true)} 
+              activeOpacity={0.9}
+            >
+              <Image 
+                source={{ uri: post.fileUrl }} 
+                style={styles.postImage} 
+                resizeMode="cover" 
+              />
+            </TouchableOpacity>
+          ) : isVideo ? (
+            <Video
+              style={styles.postImage} 
+              source={{ uri: post.fileUrl }}
+              useNativeControls
+              resizeMode={ResizeMode.CONTAIN}
+              isLooping
+            />
+          ) : (
+            <TouchableOpacity 
+              style={styles.attachment} 
+              onPress={handleViewAttachment} 
+              activeOpacity={0.7}
+            >
+              <View style={styles.attachmentIcon}>
+                <Ionicons name="document-text" size={24} color="#5C6BC0" />
+              </View>
+              <View style={styles.attachmentInfo}>
+                <Text style={styles.attachmentName} numberOfLines={1}>
+                  {displayFileName}
+                </Text>
+                <Text style={styles.attachmentSize}>Tap to open file</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
-                <View style={styles.statItem}>
-                    <Ionicons name="chatbubble-outline" size={20} color="#9EA3AE" />
-                    <Text style={styles.statNumber}>{comments.length}</Text>
-                </View>
+      {!isEditing && (
+        <>
+          {!isOwner && (
+            <TouchableOpacity 
+              style={styles.messageButton} 
+              onPress={handleSendPrivateMessage} 
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={GRADIENTS.primary}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.messageButtonGradient}
+              >
+                <Ionicons 
+                  name="chatbubble-ellipses" 
+                  size={20} 
+                  color="#FFF" 
+                  style={{ marginRight: 8 }} 
+                />
+                <Text style={styles.messageButtonText}>
+                  Send Private Message
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
 
-                {/* Share placeholder */}
-                <TouchableOpacity style={styles.statItem}>
-                    <Ionicons name="share-outline" size={20} color="#9EA3AE" />
-                </TouchableOpacity>
+          <View style={styles.statsRow}>
+            <TouchableOpacity 
+              style={styles.statItem} 
+              onPress={handleLike} 
+              activeOpacity={0.7}
+            >
+              <Ionicons 
+                name={isLiked ? "heart" : "heart-outline"} 
+                size={20} 
+                color={isLiked ? COLORS.error : "#9EA3AE"} 
+              />
+              <Text style={styles.statNumber}>{likesCount}</Text>
+            </TouchableOpacity>
 
-                <View style={{ flex: 1 }} />
-
-                <TouchableOpacity style={styles.statItem} onPress={handleSave}>
-                    <Ionicons 
-                        name={isSaved ? "bookmark" : "bookmark-outline"} 
-                        size={20} 
-                        color={isSaved ? COLORS.primary : "#9EA3AE"} 
-                    />
-                </TouchableOpacity>
+            <View style={styles.statItem}>
+              <Ionicons name="chatbubble-outline" size={20} color="#9EA3AE" />
+              <Text style={styles.statNumber}>{comments.length}</Text>
             </View>
-        </>
-        )}
 
-        {!isEditing && (
-            <Text style={styles.repliesTitle}>
-                Comments ({comments.length})
-            </Text>
-        )}
+            <TouchableOpacity style={styles.statItem}>
+              <Ionicons name="share-outline" size={20} color="#9EA3AE" />
+            </TouchableOpacity>
+
+            <View style={{ flex: 1 }} />
+
+            <TouchableOpacity style={styles.statItem} onPress={handleSave}>
+              <Ionicons 
+                name={isSaved ? "bookmark" : "bookmark-outline"} 
+                size={20} 
+                color={isSaved ? COLORS.primary : "#9EA3AE"} 
+              />
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
+      {!isEditing && (
+        <Text style={styles.repliesTitle}>
+          Comments ({comments.length})
+        </Text>
+      )}
     </View>
   );
 
   const renderComment = ({ item }: { item: Comment }) => {
     const initials = item.profiles?.full_name 
-        ? item.profiles.full_name.split(' ').map((n: string) => n[0]).join('').substring(0,2).toUpperCase()
-        : '??';
+      ? item.profiles.full_name
+          .split(' ')
+          .map((n: string) => n[0])
+          .join('')
+          .substring(0, 2)
+          .toUpperCase()
+      : '??';
     
     return (
-        <View style={styles.replyCard}>
-            <View style={styles.replyAvatarContainer}>
-                <Avatar 
-                    initials={initials} 
-                    avatarUrl={item.profiles?.avatar_url} 
-                    size="small" 
-                />
-            </View>
-
-            <View style={styles.replyContent}>
-                <View style={styles.replyHeader}>
-                    <Text style={styles.replyAuthorName}>{item.profiles?.full_name || 'Unknown'}</Text>
-                    {item.profiles?.program && (
-                        <View style={styles.replyLabelBadge}>
-                            <Text style={styles.replyLabelText}>{item.profiles.program}</Text>
-                        </View>
-                    )}
-                </View>
-                <Text style={styles.replyTimestamp}>
-                    {new Date(item.created_at).toLocaleDateString()} {new Date(item.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                </Text>
-                <Text style={styles.replyText}>{item.content}</Text>
-            </View>
+      <View style={styles.replyCard}>
+        <View style={styles.replyAvatarContainer}>
+          <Avatar 
+            initials={initials} 
+            avatarUrl={item.profiles?.avatar_url} 
+            size="small" 
+          />
         </View>
+
+        <View style={styles.replyContent}>
+          <View style={styles.replyHeader}>
+            <Text style={styles.replyAuthorName}>
+              {item.profiles?.full_name || 'Unknown'}
+            </Text>
+            {item.profiles?.program && (
+              <View style={styles.replyLabelBadge}>
+                <Text style={styles.replyLabelText}>
+                  {item.profiles.program}
+                </Text>
+              </View>
+            )}
+          </View>
+          
+          <Text style={styles.replyTimestamp}>
+            {new Date(item.created_at).toLocaleDateString()}{' '}
+            {new Date(item.created_at).toLocaleTimeString([], {
+              hour: '2-digit', 
+              minute: '2-digit'
+            })}
+          </Text>
+          
+          <Text style={styles.replyText}>{item.content}</Text>
+        </View>
+      </View>
     );
   };
 
@@ -504,18 +602,30 @@ export default function PostDetailScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          activeOpacity={0.7} 
+          onPress={handleBack}
+        >
           <Ionicons name="chevron-back" size={28} color={COLORS.textPrimary} />
         </TouchableOpacity>
 
         <Text style={styles.headerTitle}>Post</Text>
 
         {!isEditing ? (
-          <TouchableOpacity style={styles.moreButton} activeOpacity={0.7} onPress={handleMore}>
-             <Ionicons name="ellipsis-horizontal" size={24} color={COLORS.textPrimary} />
+          <TouchableOpacity 
+            style={styles.moreButton} 
+            activeOpacity={0.7} 
+            onPress={handleMore}
+          >
+            <Ionicons 
+              name="ellipsis-horizontal" 
+              size={24} 
+              color={COLORS.textPrimary} 
+            />
           </TouchableOpacity>
         ) : (
-           <View style={{ width: 40 }} /> 
+          <View style={{ width: 40 }} /> 
         )}
       </View>
 
@@ -528,49 +638,54 @@ export default function PostDetailScreen() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
         refreshControl={
-            <RefreshControl refreshing={loadingComments} onRefresh={() => {
-                fetchComments();
-                fetchLikesCount();
-            }} />
+          <RefreshControl 
+            refreshing={loadingComments} 
+            onRefresh={() => {
+              fetchComments();
+              fetchLikesCount();
+            }} 
+          />
         }
         ListEmptyComponent={
-            !loadingComments && !isEditing ? (
-                <Text style={styles.emptyCommentsText}>No comments yet. Be the first!</Text>
-            ) : null
+          !loadingComments && !isEditing ? (
+            <Text style={styles.emptyCommentsText}>
+              No comments yet. Be the first!
+            </Text>
+          ) : null
         }
       />
 
       {/* Comment Input */}
       {!isEditing && (
-          <View style={styles.commentSection}>
-              <TextInput
-                  style={styles.commentInput}
-                  placeholder="Add a public comment..."
-                  placeholderTextColor={COLORS.textTertiary}
-                  value={commentText}
-                  onChangeText={setCommentText}
-                  multiline={false}
-              />
-              <TouchableOpacity
-                  style={styles.sendButton}
-                  onPress={handleSendComment}
-                  activeOpacity={0.7}
-                  disabled={sendingComment}
-              >
-                  <LinearGradient
-                      colors={GRADIENTS.primary}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.sendButtonGradient}
-                  >
-                      {sendingComment ? (
-                          <ActivityIndicator size="small" color="#FFF" />
-                      ) : (
-                          <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
-                      )}
-                  </LinearGradient>
-              </TouchableOpacity>
-          </View>
+        <View style={styles.commentSection}>
+          <TextInput
+            style={styles.commentInput}
+            placeholder="Add a public comment..."
+            placeholderTextColor={COLORS.textTertiary}
+            value={commentText}
+            onChangeText={setCommentText}
+            multiline={false}
+          />
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={handleSendComment}
+            activeOpacity={0.7}
+            disabled={sendingComment}
+          >
+            <LinearGradient
+              colors={GRADIENTS.primary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.sendButtonGradient}
+            >
+              {sendingComment ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Image Preview Modal */}
@@ -581,23 +696,22 @@ export default function PostDetailScreen() {
         onRequestClose={() => setImageModalVisible(false)}
       >
         <SafeAreaView style={styles.modalContainer}>
-            <TouchableOpacity 
-                style={styles.closeModalButton} 
-                onPress={() => setImageModalVisible(false)}
-            >
-                <Ionicons name="close-circle" size={40} color="#FFF" />
-            </TouchableOpacity>
-            
-            {post.fileUrl && (
-                <Image 
-                    source={{ uri: post.fileUrl }} 
-                    style={styles.fullScreenImage} 
-                    resizeMode="contain"
-                />
-            )}
+          <TouchableOpacity 
+            style={styles.closeModalButton} 
+            onPress={() => setImageModalVisible(false)}
+          >
+            <Ionicons name="close-circle" size={40} color="#FFF" />
+          </TouchableOpacity>
+          
+          {post.fileUrl && (
+            <Image 
+              source={{ uri: post.fileUrl }} 
+              style={styles.fullScreenImage} 
+              resizeMode="contain"
+            />
+          )}
         </SafeAreaView>
       </Modal>
-
     </KeyboardAvoidingView>
   );
 }
@@ -685,48 +799,246 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#525769',
     lineHeight: 24,
-    marginBottom: 20 },
-  editTitleInput: { fontSize: 20, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E0E0E0', paddingVertical: 4 },
-  editDescInput: { fontSize: 15, color: COLORS.textPrimary, lineHeight: 22, marginBottom: 16, borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 12, padding: 12, minHeight: 100, textAlignVertical: 'top', backgroundColor: '#F9F9F9' },
-  editButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginBottom: 16 },
-  editButton: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, minWidth: 90, alignItems: 'center', justifyContent: 'center' },
-  cancelButton: { backgroundColor: '#F0F0F0' },
-  cancelButtonText: { color: '#666', fontWeight: '600', fontSize: 14 },
-  saveButton: { backgroundColor: COLORS.primary },
-  saveButtonText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
-  
-  // Media Styles
-  mediaContainer: { marginBottom: 24, borderRadius: 16, overflow: 'hidden' },
-  postImage: { width: '100%', height: 300, backgroundColor: '#F1F5F9' },
-  attachment: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8EAF6', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#C5CAE9' },
-  attachmentIcon: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  attachmentInfo: { flex: 1 },
-  attachmentName: { fontSize: 15, fontWeight: '700', color: '#1A1B2D', marginBottom: 4 },
-  attachmentSize: { fontSize: 13, color: '#9EA3AE' },
-  
-  // Other UI styles
-  messageButton: { marginBottom: 24, borderRadius: 16, overflow: 'hidden', shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
-  messageButtonGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, paddingHorizontal: 20 },
-  messageButtonText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-  statsRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 16, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
-  statItem: { flexDirection: 'row', alignItems: 'center', marginRight: 24 },
-  statNumber: { fontSize: 13, fontWeight: '600', color: '#9EA3AE', marginLeft: 4 },
-  repliesTitle: { fontSize: 16, fontWeight: '700', color: '#525769', marginTop: 8, marginBottom: 8 },
-  emptyCommentsText: { textAlign: 'center', color: '#9EA3AE', marginTop: 20 },
-  replyCard: { flexDirection: 'row', backgroundColor: '#FFFFFF', padding: 16, borderRadius: 16, marginBottom: 12, marginHorizontal: 16 },
-  replyAvatarContainer: { marginRight: 12 },
-  replyContent: { flex: 1 },
-  replyHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, justifyContent: 'space-between' },
-  replyAuthorName: { fontSize: 14, fontWeight: '700', color: '#1A1B2D' },
-  replyLabelBadge: { backgroundColor: '#F0F0F0', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  replyLabelText: { fontSize: 11, fontWeight: '600', color: '#9EA3AE' },
-  replyTimestamp: { fontSize: 12, color: '#9EA3AE', marginBottom: 8 },
-  replyText: { fontSize: 14, color: '#525769', lineHeight: 20 },
-  commentSection: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
-  commentInput: { flex: 1, backgroundColor: '#F7F8FA', borderRadius: 24, paddingHorizontal: 20, paddingVertical: 12, fontSize: 14, color: COLORS.textPrimary, marginRight: 12, maxHeight: 48 },
-  sendButton: { width: 48, height: 48, borderRadius: 24, overflow: 'hidden' },
-  sendButtonGradient: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
-  modalContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
-  closeModalButton: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10 },
-  fullScreenImage: { width: '100%', height: '80%' },
+    marginBottom: 20,
+  },
+  editTitleInput: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    paddingVertical: 4,
+  },
+  editDescInput: {
+    fontSize: 15,
+    color: COLORS.textPrimary,
+    lineHeight: 22,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    backgroundColor: '#F9F9F9',
+  },
+  editButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginBottom: 16,
+  },
+  editButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    minWidth: 90,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#F0F0F0',
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  saveButton: {
+    backgroundColor: COLORS.primary,
+  },
+  saveButtonText: {
+    color: '#FFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  mediaContainer: {
+    marginBottom: 24,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  postImage: {
+    width: '100%',
+    height: 300,
+    backgroundColor: '#F1F5F9',
+  },
+  attachment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8EAF6',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#C5CAE9',
+  },
+  attachmentIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  attachmentInfo: {
+    flex: 1,
+  },
+  attachmentName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1A1B2D',
+    marginBottom: 4,
+  },
+  attachmentSize: {
+    fontSize: 13,
+    color: '#9EA3AE',
+  },
+  messageButton: {
+    marginBottom: 24,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  messageButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  messageButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 24,
+  },
+  statNumber: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#9EA3AE',
+    marginLeft: 4,
+  },
+  repliesTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#525769',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  emptyCommentsText: {
+    textAlign: 'center',
+    color: '#9EA3AE',
+    marginTop: 20,
+  },
+  replyCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 12,
+    marginHorizontal: 16,
+  },
+  replyAvatarContainer: {
+    marginRight: 12,
+  },
+  replyContent: {
+    flex: 1,
+  },
+  replyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    justifyContent: 'space-between',
+  },
+  replyAuthorName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1B2D',
+  },
+  replyLabelBadge: {
+    backgroundColor: '#F0F0F0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  replyLabelText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#9EA3AE',
+  },
+  replyTimestamp: {
+    fontSize: 12,
+    color: '#9EA3AE',
+    marginBottom: 8,
+  },
+  replyText: {
+    fontSize: 14,
+    color: '#525769',
+    lineHeight: 20,
+  },
+  commentSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  commentInput: {
+    flex: 1,
+    backgroundColor: '#F7F8FA',
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    marginRight: 12,
+    maxHeight: 48,
+  },
+  sendButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  sendButtonGradient: {
+    width: 48,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeModalButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    padding: 10,
+  },
+  fullScreenImage: {
+    width: '100%',
+    height: '80%',
+  },
 });
