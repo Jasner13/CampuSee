@@ -1,9 +1,35 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, ScrollView, StyleSheet, StatusBar, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  ScrollView,
+  StyleSheet,
+  StatusBar,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  Dimensions,
+  Platform,
+  DimensionValue, // Imported DimensionValue
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path } from 'react-native-svg';
+import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+
+// --- Dynamic Layout Helpers ---
+const { height, width } = Dimensions.get('window');
+const DESIGN_HEIGHT = 896;
+const DESIGN_WIDTH = 414;
+
+const scaleY = (value: number) => (height / DESIGN_HEIGHT) * value;
+const scaleX = (value: number) => (width / DESIGN_WIDTH) * value;
 
 export default function ChangePasswordScreen() {
   const navigation = useNavigation();
@@ -12,6 +38,7 @@ export default function ChangePasswordScreen() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -22,58 +49,49 @@ export default function ChangePasswordScreen() {
     navigation.goBack();
   };
 
+  // --- Validation Logic ---
   const validatePassword = (password: string) => {
-    const checks = {
+    return {
       length: password.length >= 8,
       uppercase: /[A-Z]/.test(password),
       lowercase: /[a-z]/.test(password),
       number: /[0-9]/.test(password),
     };
-    return checks;
   };
 
   const passwordChecks = validatePassword(newPassword);
-  const allChecksPassed = Object.values(passwordChecks).every(check => check);
-
-  const getPasswordStrength = () => {
-    const passedChecks = Object.values(passwordChecks).filter(check => check).length;
-    if (passedChecks === 4) return 'Strong';
-    if (passedChecks >= 2) return 'Medium';
-    return 'Weak';
-  };
-
-  const getStrengthColor = () => {
-    const strength = getPasswordStrength();
-    if (strength === 'Strong') return COLORS.success;
-    if (strength === 'Medium') return '#F59E0B';
-    return '#EF4444';
-  };
-
+  const allChecksPassed = Object.values(passwordChecks).every((check) => check);
   const passwordsMatch = newPassword === confirmPassword && confirmPassword.length > 0;
 
-  const handleSaveChanges = async () => {
-    if (!currentPassword) {
-      Alert.alert('Error', 'Please enter your current password');
-      return;
-    }
+  const getPasswordStrength = () => {
+    const passedChecks = Object.values(passwordChecks).filter((check) => check).length;
+    // Cast widths as DimensionValue to fix the TypeScript error
+    if (passedChecks === 4) return { label: 'Strong', color: COLORS.success, width: '100%' as DimensionValue };
+    if (passedChecks >= 2) return { label: 'Medium', color: '#F59E0B', width: '66%' as DimensionValue };
+    return { label: 'Weak', color: '#EF4444', width: '33%' as DimensionValue };
+  };
 
-    if (!newPassword) {
-      Alert.alert('Error', 'Please enter a new password');
+  const strength = getPasswordStrength();
+
+  // --- Handlers ---
+  const handleSaveChanges = async () => {
+    if (!currentPassword || !newPassword) {
+      Alert.alert('Incomplete', 'Please fill in all fields.');
       return;
     }
 
     if (!allChecksPassed) {
-      Alert.alert('Error', 'Please meet all password requirements');
+      Alert.alert('Weak Password', 'Please meet all password requirements.');
       return;
     }
 
     if (!passwordsMatch) {
-      Alert.alert('Error', 'Passwords do not match');
+      Alert.alert('Mismatch', 'New passwords do not match.');
       return;
     }
 
     if (!session?.user?.email) {
-      Alert.alert('Error', 'User session not found');
+      Alert.alert('Error', 'User session not found.');
       return;
     }
 
@@ -87,7 +105,7 @@ export default function ChangePasswordScreen() {
       });
 
       if (signInError) {
-        Alert.alert('Error', 'Incorrect current password');
+        Alert.alert('Incorrect Password', 'The current password you entered is incorrect.');
         setIsLoading(false);
         return;
       }
@@ -99,16 +117,9 @@ export default function ChangePasswordScreen() {
 
       if (updateError) throw updateError;
 
-      Alert.alert(
-        'Success',
-        'Your password has been changed successfully.',
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.goBack(),
-          },
-        ]
-      );
+      Alert.alert('Success', 'Your password has been changed successfully.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
     } catch (error) {
       if (error instanceof Error) {
         Alert.alert('Error', error.message);
@@ -118,179 +129,222 @@ export default function ChangePasswordScreen() {
     }
   };
 
+  // --- Render Helpers ---
+  const renderRequirement = (met: boolean, text: string) => (
+    <View style={styles.requirementItem}>
+      <Ionicons 
+        name={met ? "checkmark-circle" : "ellipse-outline"} 
+        size={16} 
+        color={met ? COLORS.success : COLORS.textTertiary} 
+      />
+      <Text style={[styles.requirementText, met && styles.requirementMet]}>
+        {text}
+      </Text>
+    </View>
+  );
+
+  const LockIcon = () => (
+    <Svg width={scaleX(24)} height={scaleY(24)} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M19 11H5C3.89543 11 3 11.8954 3 13V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V13C21 11.8954 20.1046 11 19 11Z"
+        stroke={COLORS.textSecondary}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M7 11V7C7 5.67392 7.52678 4.40215 8.46447 3.46447C9.40215 2.52678 10.6739 2 12 2C13.3261 2 14.5979 2.52678 15.5355 3.46447C16.4732 4.40215 17 5.67392 17 7V11"
+        stroke={COLORS.textSecondary}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
-          <Text style={styles.backIcon}>←</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>Change Password</Text>
-
-        <View style={styles.placeholder} />
-      </View>
-
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Info Banner */}
-        <View style={styles.infoBanner}>
-          <Text style={styles.infoText}>
-            For your Security, choose a strong password that you haven't used elsewhere.
-          </Text>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            activeOpacity={0.7} 
+            onPress={handleBack}
+          >
+             <Ionicons name="chevron-back" size={28} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Change Password</Text>
+          <View style={{ width: 40 }} />
         </View>
 
-        {/* Current Password */}
-        <View style={styles.inputSection}>
-          <Text style={styles.label}>Current Password</Text>
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-              placeholder="Enter current password"
-              placeholderTextColor={COLORS.textTertiary}
-              secureTextEntry={!showCurrentPassword}
-              autoCapitalize="none"
-            />
-            <TouchableOpacity
-              onPress={() => setShowCurrentPassword(!showCurrentPassword)}
-              style={styles.eyeButton}
-            >
-              <Text style={styles.eyeIcon}>{showCurrentPassword ? '👁️' : '👁️‍🗨️'}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* New Password */}
-        <View style={styles.inputSection}>
-          <Text style={styles.label}>New Password</Text>
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              value={newPassword}
-              onChangeText={setNewPassword}
-              placeholder="Enter new password"
-              placeholderTextColor={COLORS.textTertiary}
-              secureTextEntry={!showNewPassword}
-              autoCapitalize="none"
-            />
-            <TouchableOpacity
-              onPress={() => setShowNewPassword(!showNewPassword)}
-              style={styles.eyeButton}
-            >
-              <Text style={styles.eyeIcon}>{showNewPassword ? '👁️' : '👁️‍🗨️'}</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Password Strength */}
-          {newPassword.length > 0 && (
-            <View style={styles.strengthContainer}>
-              <Text style={styles.strengthLabel}>Password Strength: </Text>
-              <Text style={[styles.strengthText, { color: getStrengthColor() }]}>
-                {getPasswordStrength()}
-              </Text>
-            </View>
-          )}
-
-          {/* Password Requirements */}
-          {newPassword.length > 0 && (
-            <View style={styles.requirementsContainer}>
-              <View style={styles.requirementItem}>
-                <Text style={passwordChecks.length ? styles.checkmark : styles.bullet}>
-                  {passwordChecks.length ? '✓' : '•'}
-                </Text>
-                <Text style={[styles.requirementText, passwordChecks.length && styles.requirementMet]}>
-                  At least 8 characters
-                </Text>
-              </View>
-
-              <View style={styles.requirementItem}>
-                <Text style={passwordChecks.uppercase ? styles.checkmark : styles.bullet}>
-                  {passwordChecks.uppercase ? '✓' : '•'}
-                </Text>
-                <Text style={[styles.requirementText, passwordChecks.uppercase && styles.requirementMet]}>
-                  One uppercase letter
-                </Text>
-              </View>
-
-              <View style={styles.requirementItem}>
-                <Text style={passwordChecks.lowercase ? styles.checkmark : styles.bullet}>
-                  {passwordChecks.lowercase ? '✓' : '•'}
-                </Text>
-                <Text style={[styles.requirementText, passwordChecks.lowercase && styles.requirementMet]}>
-                  One lowercase letter
-                </Text>
-              </View>
-
-              <View style={styles.requirementItem}>
-                <Text style={passwordChecks.number ? styles.checkmark : styles.bullet}>
-                  {passwordChecks.number ? '✓' : '•'}
-                </Text>
-                <Text style={[styles.requirementText, passwordChecks.number && styles.requirementMet]}>
-                  One number
-                </Text>
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* Confirm New Password */}
-        <View style={styles.inputSection}>
-          <Text style={styles.label}>Confirm New Password</Text>
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="Re-enter new password"
-              placeholderTextColor={COLORS.textTertiary}
-              secureTextEntry={!showConfirmPassword}
-              autoCapitalize="none"
-            />
-            <TouchableOpacity
-              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-              style={styles.eyeButton}
-            >
-              <Text style={styles.eyeIcon}>{showConfirmPassword ? '👁️' : '👁️‍🗨️'}</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Password Match Indicator */}
-          {confirmPassword.length > 0 && (
-            <View style={styles.matchContainer}>
-              <Text style={passwordsMatch ? styles.matchText : styles.noMatchText}>
-                {passwordsMatch ? '✓ Passwords match' : '✗ Passwords do not match'}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Save Changes Button */}
-        <TouchableOpacity
-          style={[
-            styles.saveButton,
-            (!allChecksPassed || !passwordsMatch || !currentPassword || isLoading) && styles.saveButtonDisabled
-          ]}
-          onPress={handleSaveChanges}
-          activeOpacity={0.8}
-          disabled={!allChecksPassed || !passwordsMatch || !currentPassword || isLoading}
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {isLoading ? (
-            <ActivityIndicator size="small" color={COLORS.textLight} />
-          ) : (
-            <>
-              <Text style={styles.checkIcon}>✓</Text>
-              <Text style={styles.saveButtonText}>Save Changes</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
+          {/* Info Banner */}
+          <View style={styles.infoBanner}>
+            <Ionicons name="shield-checkmark-outline" size={24} color="#059669" style={{ marginRight: 12 }} />
+            <Text style={styles.infoText}>
+              Create a strong password that you don't use for other websites.
+            </Text>
+          </View>
+
+          {/* Current Password */}
+          <View style={styles.inputSection}>
+            <Text style={styles.label}>Current Password</Text>
+            <View style={styles.textField}>
+              <View style={styles.fieldContent}>
+                <LockIcon />
+                <TextInput
+                  style={styles.textInput}
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  placeholder="Enter current password"
+                  placeholderTextColor={COLORS.textTertiary}
+                  secureTextEntry={!showCurrentPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons 
+                    name={showCurrentPassword ? "eye-off" : "eye"} 
+                    size={22} 
+                    color={COLORS.textSecondary} 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          {/* New Password */}
+          <View style={styles.inputSection}>
+            <Text style={styles.label}>New Password</Text>
+            <View style={styles.textField}>
+              <View style={styles.fieldContent}>
+                <LockIcon />
+                <TextInput
+                  style={styles.textInput}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  placeholder="Enter new password"
+                  placeholderTextColor={COLORS.textTertiary}
+                  secureTextEntry={!showNewPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowNewPassword(!showNewPassword)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons 
+                    name={showNewPassword ? "eye-off" : "eye"} 
+                    size={22} 
+                    color={COLORS.textSecondary} 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Password Strength Indicator */}
+            {newPassword.length > 0 && (
+              <View style={styles.strengthContainer}>
+                <View style={styles.strengthBarBg}>
+                  <View 
+                    style={[
+                      styles.strengthBarFill, 
+                      { backgroundColor: strength.color, width: strength.width }
+                    ]} 
+                  />
+                </View>
+                <Text style={[styles.strengthText, { color: strength.color }]}>
+                  {strength.label}
+                </Text>
+              </View>
+            )}
+
+            {/* Requirements List */}
+            <View style={styles.requirementsContainer}>
+                {renderRequirement(passwordChecks.length, "At least 8 characters")}
+                {renderRequirement(passwordChecks.uppercase, "One uppercase letter")}
+                {renderRequirement(passwordChecks.lowercase, "One lowercase letter")}
+                {renderRequirement(passwordChecks.number, "One number")}
+            </View>
+          </View>
+
+          {/* Confirm Password */}
+          <View style={styles.inputSection}>
+            <Text style={styles.label}>Confirm New Password</Text>
+            <View style={[
+                styles.textField, 
+                confirmPassword.length > 0 && (passwordsMatch ? styles.borderSuccess : styles.borderError)
+            ]}>
+              <View style={styles.fieldContent}>
+                <LockIcon />
+                <TextInput
+                  style={styles.textInput}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Re-enter new password"
+                  placeholderTextColor={COLORS.textTertiary}
+                  secureTextEntry={!showConfirmPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons 
+                    name={showConfirmPassword ? "eye-off" : "eye"} 
+                    size={22} 
+                    color={COLORS.textSecondary} 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            {confirmPassword.length > 0 && (
+                 <Text style={[styles.matchText, { color: passwordsMatch ? COLORS.success : COLORS.error }]}>
+                    {passwordsMatch ? "Passwords match" : "Passwords do not match"}
+                 </Text>
+            )}
+          </View>
+
+          {/* Save Button */}
+          <TouchableOpacity
+            style={[styles.saveButtonShadow, { marginTop: 20 }]}
+            onPress={handleSaveChanges}
+            disabled={isLoading || !allChecksPassed || !passwordsMatch}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+                colors={
+                    (!allChecksPassed || !passwordsMatch || !currentPassword) 
+                    ? [COLORS.textTertiary, COLORS.textTertiary] // Disabled state
+                    : ['#4F46E5', '#6366F1', '#8B5CF6'] // Primary Gradient
+                } 
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.saveButtonGradient}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.saveButtonText}>Update Password</Text>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+
+        </ScrollView>
+      </SafeAreaView>
     </View>
   );
 }
@@ -300,162 +354,164 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  safeArea: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: COLORS.backgroundLight,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    paddingVertical: 16,
+    backgroundColor: COLORS.background,
   },
   backButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backIcon: {
-    fontSize: 24,
-    color: COLORS.textPrimary,
+    alignItems: 'flex-start',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: COLORS.textPrimary,
-  },
-  placeholder: {
-    width: 40,
+    fontFamily: Platform.OS === 'ios' ? 'Nunito Sans' : 'sans-serif',
   },
   content: {
     flex: 1,
   },
   contentContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
+    paddingHorizontal: 24,
+    paddingTop: 10,
     paddingBottom: 40,
   },
   infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#D1FAE5',
     padding: 16,
-    borderRadius: 12,
-    marginBottom: 24,
+    borderRadius: 16,
+    marginBottom: 32,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
   },
   infoText: {
+    flex: 1,
     fontSize: 13,
-    color: '#059669',
-    lineHeight: 20,
+    color: '#065F46',
+    lineHeight: 18,
+    fontWeight: '500',
   },
   inputSection: {
     marginBottom: 24,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     color: COLORS.textPrimary,
     marginBottom: 8,
+    fontFamily: Platform.OS === 'ios' ? 'Nunito Sans' : 'sans-serif',
   },
-  inputContainer: {
+  textField: {
+    width: '100%',
+    height: scaleY(64),
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: COLORS.faintGray,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+  },
+  borderSuccess: {
+      borderColor: COLORS.success,
+  },
+  borderError: {
+      borderColor: COLORS.error,
+  },
+  fieldContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.backgroundLight,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
     paddingHorizontal: 16,
+    gap: 12,
   },
-  input: {
+  textInput: {
     flex: 1,
-    paddingVertical: 16,
     fontSize: 16,
     color: COLORS.textPrimary,
+    fontWeight: '600',
+    height: '100%',
+    fontFamily: Platform.OS === 'ios' ? 'Nunito Sans' : 'sans-serif',
   },
-  eyeButton: {
-    padding: 4,
-  },
-  eyeIcon: {
-    fontSize: 20,
-  },
+  
+  // Strength Meter
   strengthContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 12,
+      gap: 12,
   },
-  strengthLabel: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
+  strengthBarBg: {
+      flex: 1,
+      height: 6,
+      backgroundColor: COLORS.border,
+      borderRadius: 3,
+      overflow: 'hidden',
+  },
+  strengthBarFill: {
+      height: '100%',
+      borderRadius: 3,
   },
   strengthText: {
-    fontSize: 13,
-    fontWeight: '600',
+      fontSize: 12,
+      fontWeight: '700',
+      minWidth: 50,
+      textAlign: 'right',
   },
+
+  // Requirements
   requirementsContainer: {
-    backgroundColor: '#F3F4F6',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 12,
+      marginTop: 16,
+      gap: 8,
   },
   requirementItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 4,
-  },
-  bullet: {
-    fontSize: 16,
-    color: COLORS.textTertiary,
-    marginRight: 8,
-    width: 16,
-  },
-  checkmark: {
-    fontSize: 16,
-    color: COLORS.success,
-    marginRight: 8,
-    width: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
   },
   requirementText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
+      fontSize: 13,
+      color: COLORS.textSecondary,
   },
   requirementMet: {
-    color: COLORS.success,
-    fontWeight: '500',
-  },
-  matchContainer: {
-    marginTop: 8,
+      color: COLORS.success,
+      fontWeight: '600',
   },
   matchText: {
-    fontSize: 13,
-    color: COLORS.success,
-    fontWeight: '500',
+      fontSize: 12,
+      fontWeight: '600',
+      marginTop: 6,
+      marginLeft: 4,
   },
-  noMatchText: {
-    fontSize: 13,
-    color: '#EF4444',
-    fontWeight: '500',
+
+  // Button Styles
+  saveButtonShadow: {
+    height: scaleY(64),
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
   },
-  saveButton: {
-    flexDirection: 'row',
+  saveButtonGradient: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.success,
-    paddingVertical: 16,
-    borderRadius: 12,
-    marginTop: 8,
-  },
-  saveButtonDisabled: {
-    backgroundColor: COLORS.border,
-    opacity: 0.5,
-  },
-  checkIcon: {
-    fontSize: 18,
-    color: COLORS.textLight,
-    marginRight: 8,
   },
   saveButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.textLight,
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    fontFamily: Platform.OS === 'ios' ? 'Nunito Sans' : 'sans-serif',
   },
 });
