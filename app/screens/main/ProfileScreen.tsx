@@ -1,9 +1,11 @@
+// app/screens/main/ProfileScreen.tsx
 import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, ActivityIndicator, Image, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect, CompositeNavigationProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Feather } from '@expo/vector-icons'; 
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 import { BottomNav } from '../../components/BottomNav';
 import { PostCard, Post } from '../../components/cards/PostCard';
@@ -51,8 +53,6 @@ export default function ProfileScreen() {
   const [followingCount, setFollowingCount] = useState(0);
 
   // Determine online status
-  // Note: Since this is the current user's profile, we check if they are in the onlineUsers set.
-  // If active_status is disabled in settings, they won't be in the set, so the dot won't show (correct behavior).
   const isOnline = session?.user ? onlineUsers.has(session.user.id) : false;
 
   useFocusEffect(
@@ -223,13 +223,13 @@ export default function ProfileScreen() {
 
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={() => navigation.goBack()}>
-          <Text style={styles.backIcon}>←</Text>
+          <Feather name="arrow-left" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
 
         <Text style={styles.headerTitle}>Profile</Text>
 
         <TouchableOpacity style={styles.settingsButton} activeOpacity={0.7} onPress={handleSettingsPress}>
-          <Text style={styles.settingsIcon}>⚙️</Text>
+          <Feather name="settings" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
       </View>
 
@@ -360,10 +360,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  backIcon: {
-    fontSize: 24,
-    color: COLORS.textPrimary,
-  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -374,9 +370,6 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  settingsIcon: {
-    fontSize: 22,
   },
   content: {
     flex: 1,
