@@ -208,6 +208,7 @@ export default function PostDetailScreen() {
             type: 'like',
             title: 'New Like',
             content: 'Someone liked your post.',
+            resource_id: post.id, // Ensure resource_id is here too
             is_read: false
           });
         }
@@ -324,6 +325,7 @@ export default function PostDetailScreen() {
             type: 'comment',
             title: 'New Comment',
             content: `Commented: ${commentText.trim().substring(0, 50)}...`,
+            resource_id: post.id, // <--- FIXED: Added resource_id to link notification to post
             is_read: false
           });
         }

@@ -1,15 +1,33 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import { 
+  View, 
+  Text, 
+  ScrollView, 
+  StyleSheet, 
+  StatusBar, 
+  TouchableOpacity, 
+  RefreshControl, 
+  ActivityIndicator,
+  Alert 
+} from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import type { MainTabParamList } from '../../navigation/types';
-import { BottomNav } from '../../components/BottomNav';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
+import { CompositeNavigationProp } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+
 import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Notification } from '../../types';
+import { Notification } from '../../types'; // Only import Notification from here
+import { Post } from '../../components/cards/PostCard'; // Import Post from the component to match UI shape
+import { Avatar } from '../../components/Avatar';
+import { UserProfileModal } from '../../components/modals/UserProfileModal';
 
-type NotificationsScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Notifications'>;
+type NotificationsScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Notifications'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 export default function NotificationsScreen() {
   const navigation = useNavigation<NotificationsScreenNavigationProp>();
@@ -18,14 +36,25 @@ export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [navigating, setNavigating] = useState(false);
 
-  // Helper to map DB types to UI Icons/Colors
-  const getNotificationStyle = (type: string) => {
+  // Modal State for User Profiles
+  const [userModalVisible, setUserModalVisible] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+
+  // --- Helper: Get Initials ---
+  const getInitials = (name: string | null) => {
+    if (!name) return '??';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  // --- Helper: UI Configuration ---
+  const getNotificationConfig = (type: string) => {
     switch (type) {
-      case 'like': return { icon: '💗', bg: '#FFE0F0', action: 'liked your post' };
+      case 'like': return { icon: '❤️', bg: '#FFE0F0', action: 'liked your post' };
       case 'comment': return { icon: '💬', bg: '#D1FAE5', action: 'commented on' };
-      case 'follow': return { icon: '👤', bg: '#DBEAFE', action: 'started following you' };
-      case 'event': return { icon: '📅', bg: '#E9D5FF', action: 'New Event:' };
+      case 'follow': return { icon: null, bg: 'transparent', action: 'started following you' }; // Icon handled by Avatar
+      case 'event': return { icon: '📅', bg: '#E9D5FF', action: 'posted a new event:' };
       case 'announcement': return { icon: '📢', bg: '#FEF3C7', action: 'Announcement:' };
       default: return { icon: '🔔', bg: '#F3F4F6', action: 'notification' };
     }
@@ -41,6 +70,7 @@ export default function NotificationsScreen() {
     return `${Math.floor(hours / 24)}d ago`;
   };
 
+  // --- Fetch Logic ---
   const fetchNotifications = async () => {
     if (!session?.user) return;
     try {
@@ -48,7 +78,7 @@ export default function NotificationsScreen() {
         .from('notifications')
         .select(`
           *,
-          actor:actor_id (full_name, avatar_url)
+          actor:profiles!notifications_actor_id_fkey (full_name, avatar_url)
         `)
         .order('created_at', { ascending: false });
 
@@ -71,10 +101,7 @@ export default function NotificationsScreen() {
         .on(
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${session?.user.id}` },
-          (payload) => {
-            // Note: Realtime payload usually doesn't have joins (actor name).
-            // A simple refresh is often safer, or just append raw data.
-            // For now, we'll fetch fresh data to get the actor name.
+          () => {
             fetchNotifications();
           }
         )
@@ -84,35 +111,87 @@ export default function NotificationsScreen() {
     }, [session])
   );
 
-  const handleMarkAllRead = async () => {
-    if (!session?.user) return;
-    // Optimistic update
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-
-    await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('user_id', session.user.id);
-  };
-
-  const handleNotificationPress = async (notification: Notification) => {
-    if (!notification.is_read) {
-      // Mark specific item as read locally and in DB
-      setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
-      await supabase.from('notifications').update({ is_read: true }).eq('id', notification.id);
-    }
-    // Future: Navigate based on type
-    console.log('Pressed notification:', notification.id);
-  };
-
   const onRefresh = () => {
     setRefreshing(true);
     fetchNotifications();
   };
 
-  const handleNavigate = (item: 'home' | 'messages' | 'notifications' | 'profile') => {
-    const routeMap = { home: 'Home', messages: 'Messages', notifications: 'Notifications', profile: 'Profile' } as const;
-    navigation.navigate(routeMap[item]);
+  const handleMarkAllRead = async () => {
+    if (!session?.user) return;
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    await supabase.from('notifications').update({ is_read: true }).eq('user_id', session.user.id);
+  };
+
+  // --- Interaction Logic ---
+
+  const handleNavigateToPost = async (postId: string) => {
+    setNavigating(true);
+    try {
+        const { data, error } = await supabase
+            .from('posts')
+            .select(`
+                *,
+                profiles:profiles!posts_user_id_fkey (full_name, avatar_url),
+                post_likes(count),
+                comments(count)
+            `)
+            .eq('id', postId)
+            .single();
+
+        if (error || !data) {
+            Alert.alert("Error", "This post is no longer available.");
+            return;
+        }
+
+        const formattedPost: Post = {
+            id: data.id,
+            userId: data.user_id,
+            authorName: data.profiles?.full_name || 'Unknown User',
+            authorInitials: getInitials(data.profiles?.full_name),
+            authorAvatarUrl: data.profiles?.avatar_url,
+            timestamp: new Date(data.created_at).toLocaleDateString(),
+            label: data.category,
+            title: data.title,
+            description: data.description,
+            category: data.category,
+            fileUrl: data.file_url,
+            fileType: data.file_type,
+            fileName: data.file_name,
+            likesCount: data.post_likes?.[0]?.count || 0,
+            commentsCount: data.comments?.[0]?.count || 0,
+        };
+
+        navigation.navigate('PostDetails', { post: formattedPost });
+
+    } catch (err) {
+        console.error(err);
+        Alert.alert("Error", "Could not load post.");
+    } finally {
+        setNavigating(false);
+    }
+  };
+
+  const handleNotificationPress = async (notification: Notification) => {
+    // 1. Mark as read immediately in UI
+    if (!notification.is_read) {
+      setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
+      // Fire and forget update
+      supabase.from('notifications').update({ is_read: true }).eq('id', notification.id).then();
+    }
+
+    // 2. Handle Navigation based on Type
+    if (notification.type === 'follow') {
+        if (notification.actor_id) {
+            setSelectedUserId(notification.actor_id);
+            setUserModalVisible(true);
+        }
+    } else if (['like', 'comment', 'event'].includes(notification.type)) {
+        if (notification.resource_id) {
+            await handleNavigateToPost(notification.resource_id);
+        } else {
+            Alert.alert("Notice", "Content not available.");
+        }
+    }
   };
 
   return (
@@ -132,6 +211,13 @@ export default function NotificationsScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Loading Overlay for Navigation */}
+      {navigating && (
+          <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color={COLORS.primary} />
+          </View>
+      )}
+
       {/* Notifications List */}
       <ScrollView
         style={styles.notificationsContainer}
@@ -147,8 +233,9 @@ export default function NotificationsScreen() {
           </View>
         ) : (
           notifications.map((notification) => {
-            const style = getNotificationStyle(notification.type);
+            const config = getNotificationConfig(notification.type);
             const actorName = notification.actor?.full_name || 'System';
+            const initials = getInitials(actorName);
 
             return (
               <TouchableOpacity
@@ -157,14 +244,31 @@ export default function NotificationsScreen() {
                 activeOpacity={0.7}
                 onPress={() => handleNotificationPress(notification)}
               >
-                <View style={[styles.iconContainer, { backgroundColor: style.bg }]}>
-                  <Text style={styles.notificationIcon}>{style.icon}</Text>
+                {/* Logic: If 'follow', show Avatar. Else show Icon circle */}
+                <View style={styles.leftContainer}>
+                    {notification.type === 'follow' ? (
+                        <View style={styles.avatarWrapper}>
+                            <Avatar 
+                                initials={initials} 
+                                avatarUrl={notification.actor?.avatar_url} 
+                                size="small" 
+                            />
+                            {/* Tiny overlay icon to indicate it's a follow (optional polish) */}
+                            <View style={styles.followBadge}>
+                                <Text style={{fontSize: 8}}>👤</Text>
+                            </View>
+                        </View>
+                    ) : (
+                        <View style={[styles.iconContainer, { backgroundColor: config.bg }]}>
+                            <Text style={styles.notificationIcon}>{config.icon}</Text>
+                        </View>
+                    )}
                 </View>
 
                 <View style={styles.notificationContent}>
                   <Text style={styles.notificationText}>
                     <Text style={styles.userName}>{actorName}</Text>
-                    <Text style={styles.action}> {style.action}</Text>
+                    <Text style={styles.action}> {config.action}</Text>
                     {notification.content && (
                       <Text style={styles.postTitle}> {notification.content}</Text>
                     )}
@@ -178,6 +282,15 @@ export default function NotificationsScreen() {
           })
         )}
       </ScrollView>
+
+      {/* User Profile Modal */}
+      {selectedUserId && (
+        <UserProfileModal 
+            visible={userModalVisible}
+            onClose={() => setUserModalVisible(false)}
+            userId={selectedUserId}
+        />
+      )}
     </View>
   );
 }
@@ -238,13 +351,32 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
     backgroundColor: COLORS.backgroundLight,
   },
+  leftContainer: {
+      marginRight: 12,
+  },
   iconContainer: {
     width: 48,
     height: 48,
     borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+  },
+  avatarWrapper: {
+      position: 'relative',
+      padding: 4, // Align visual size with icon container
+  },
+  followBadge: {
+      position: 'absolute',
+      bottom: 0,
+      right: 0,
+      backgroundColor: '#DBEAFE',
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: '#FFF'
   },
   notificationIcon: {
     fontSize: 24,
@@ -252,6 +384,8 @@ const styles = StyleSheet.create({
   notificationContent: {
     flex: 1,
     paddingRight: 12,
+    justifyContent: 'center',
+    minHeight: 48, // Match icon height for alignment
   },
   notificationText: {
     fontSize: 15,
@@ -282,4 +416,15 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     marginTop: 6,
   },
+  loadingOverlay: {
+      position: 'absolute',
+      top: 100,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 20,
+      justifyContent: 'flex-start',
+      alignItems: 'center',
+      paddingTop: 50,
+  }
 });
