@@ -11,6 +11,7 @@ export interface Profile {
         replies_to_posts?: boolean;
         new_messages?: boolean;
         post_interactions?: boolean;
+        active_status?: boolean; // <--- ADDED
         [key: string]: any;
     } | null;
     updated_at: string | null;
@@ -36,7 +37,7 @@ export interface Notification {
     title: string | null;
     content: string | null;
     is_read: boolean;
-    resource_id?: string | null; // Added resource_id
+    resource_id?: string | null;
     actor?: {
         full_name: string | null;
         avatar_url: string | null;

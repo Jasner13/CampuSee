@@ -1,3 +1,5 @@
+// app/screens/main/MessagesScreen.tsx
+// ... imports ...
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, ActivityIndicator, TextInput, Keyboard } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
@@ -6,14 +8,13 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 import { MessageCard } from '../../components/cards/MessageCard';
-import { BottomNav } from '../../components/BottomNav';
 import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Avatar } from '../../components/Avatar';
 import { ConversationView, Profile } from '../../types';
 
+// ... type definitions ...
 type MessagesScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Messages'>,
   NativeStackNavigationProp<RootStackParamList>
@@ -21,31 +22,17 @@ type MessagesScreenNavigationProp = CompositeNavigationProp<
 
 export default function MessagesScreen() {
   const navigation = useNavigation<MessagesScreenNavigationProp>();
-  const { session } = useAuth();
+  const { session, onlineUsers } = useAuth(); // <--- Get onlineUsers
 
+  // ... state ...
   const [conversations, setConversations] = useState<ConversationView[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Search State
   const [isSearching, setIsSearching] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [isSearchingLoading, setIsSearchingLoading] = useState(false);
 
-  const handleNavigate = (item: 'home' | 'messages' | 'notifications' | 'profile') => {
-    const routeMap = {
-      home: 'Home',
-      messages: 'Messages',
-      notifications: 'Notifications',
-      profile: 'Profile',
-    } as const;
-    navigation.navigate(routeMap[item]);
-  };
-
-  const handleCreatePost = () => {
-    navigation.navigate('CreatePost');
-  };
-
+  // ... handleNavigate, handleBack, toggleSearch functions ...
   const handleBack = () => {
     if (isSearching) {
       setIsSearching(false);
@@ -59,51 +46,26 @@ export default function MessagesScreen() {
 
   const toggleSearch = () => {
     setIsSearching(!isSearching);
-    if (!isSearching) {
-      // Just opened search
-    } else {
-      // Closed search
+    if (isSearching) {
       setSearchText('');
       setSearchResults([]);
     }
   };
 
-  // --- 1. Fetch Conversations (Inbox) ---
-  const fetchConversations = async () => {
-    if (!session?.user) return;
-    try {
-      const { data, error } = await supabase
-        .from('user_conversations')
-        .select('*')
-        .order('time', { ascending: false });
-
-      if (error) throw error;
-      if (data) setConversations(data as ConversationView[]);
-    } catch (error) {
-      console.error('Error fetching chats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // --- 2. Search Users Logic ---
   const handleSearchTextChange = async (text: string) => {
     setSearchText(text);
     if (text.length === 0) {
       setSearchResults([]);
       return;
     }
-
     setIsSearchingLoading(true);
     try {
-      // Search profiles by name
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .neq('id', session?.user.id) // Don't show myself
+        .neq('id', session?.user.id)
         .ilike('full_name', `%${text}%`)
         .limit(10);
-
       if (error) throw error;
       setSearchResults(data || []);
     } catch (err) {
@@ -113,11 +75,25 @@ export default function MessagesScreen() {
     }
   };
 
-  // --- Navigation to Chat ---
+  const fetchConversations = async () => {
+    if (!session?.user) return;
+    try {
+      const { data, error } = await supabase
+        .from('user_conversations')
+        .select('*')
+        .order('time', { ascending: false });
+      if (error) throw error;
+      if (data) setConversations(data as ConversationView[]);
+    } catch (error) {
+      console.error('Error fetching chats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const openChat = (id: string, name: string | null, avatarUrl: string | null) => {
     const peerName = name || 'Unknown User';
     const peerInitials = peerName.substring(0, 2).toUpperCase();
-
     navigation.navigate('MessagesChat', {
       peerId: id,
       peerName: peerName,
@@ -128,28 +104,18 @@ export default function MessagesScreen() {
 
   useEffect(() => {
     fetchConversations();
-    const channel = supabase
-      .channel('public:messages')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'messages' },
-        (payload) => {
+    const channel = supabase.channel('public:messages')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
           const changedRecord = payload.new as any; 
-
           if (changedRecord && (changedRecord.sender_id === session?.user.id || changedRecord.receiver_id === session?.user.id)) {
             fetchConversations();
           }
-        }
-      )
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [session]);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchConversations();
-    }, [])
-  );
+  useFocusEffect(useCallback(() => { fetchConversations(); }, []));
 
   const formatTime = (isoString: string) => {
     const date = new Date(isoString);
@@ -161,7 +127,6 @@ export default function MessagesScreen() {
     return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   };
 
-  // --- Helper to parse shared post JSON ---
   const getMessagePreview = (content: string, senderId: string) => {
     try {
         if (content && content.trim().startsWith('{')) {
@@ -169,14 +134,10 @@ export default function MessagesScreen() {
             if (parsed.type === 'share_post') {
                 const isMe = senderId === session?.user?.id;
                 const postTitle = parsed.title || 'a post';
-                return isMe 
-                    ? `You shared a post: "${postTitle}"`
-                    : `Shared a post: "${postTitle}"`;
+                return isMe ? `You shared a post: "${postTitle}"` : `Shared a post: "${postTitle}"`;
             }
         }
-    } catch (e) {
-        // Content is not JSON, return original
-    }
+    } catch (e) {}
     return content;
   };
 
@@ -229,6 +190,7 @@ export default function MessagesScreen() {
                       initials={getInitials(item.full_name)}
                       avatarUrl={item.avatar_url}
                       size="small"
+                      isOnline={onlineUsers.has(item.id)} // <--- Pass Online Status
                     />
                   </View>
                   <View>
@@ -260,6 +222,7 @@ export default function MessagesScreen() {
               const name = item.peer_name || 'Unknown';
               const initials = getInitials(name);
               const isUnread = item.receiver_id === session?.user.id && !item.is_read;
+              const isUserOnline = onlineUsers.has(item.peer_id); // <--- Check online status
 
               return (
                 <MessageCard
@@ -268,7 +231,7 @@ export default function MessagesScreen() {
                   time={formatTime(item.time)}
                   initials={initials}
                   avatarUrl={item.peer_avatar}
-                  isOnline={false}
+                  isOnline={isUserOnline} // <--- Pass it down
                   isUnread={isUnread}
                   onPress={() => openChat(item.peer_id, item.peer_name, item.peer_avatar)}
                 />
@@ -291,97 +254,20 @@ export default function MessagesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: COLORS.backgroundLight,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E7FF',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backIcon: {
-    fontSize: 24,
-    color: COLORS.textPrimary,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-  },
-  searchInput: {
-    flex: 1,
-    height: 40,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    marginHorizontal: 10,
-    fontSize: 16
-  },
-  searchButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  searchCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  searchCircleActive: {
-    backgroundColor: '#EEF2FF',
-  },
-  messageList: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  messageListContent: {
-    backgroundColor: COLORS.background,
-    paddingBottom: 30
-  },
-  separator: {
-    height: 2,
-    backgroundColor: COLORS.background,
-  },
-  userSearchCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.backgroundLight,
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  searchAvatarContainer: {
-    marginRight: 12
-  },
-  searchName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.textPrimary
-  },
-  searchProgram: {
-    fontSize: 12,
-    color: COLORS.textSecondary
-  }
+  container: { flex: 1, backgroundColor: COLORS.background },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, backgroundColor: COLORS.backgroundLight, borderBottomWidth: 1, borderBottomColor: '#E0E7FF' },
+  backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  backIcon: { fontSize: 24, color: COLORS.textPrimary },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary },
+  searchInput: { flex: 1, height: 40, backgroundColor: '#F1F5F9', borderRadius: 20, paddingHorizontal: 16, marginHorizontal: 10, fontSize: 16 },
+  searchButton: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
+  searchCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center' },
+  searchCircleActive: { backgroundColor: '#EEF2FF' },
+  messageList: { flex: 1, backgroundColor: COLORS.background },
+  messageListContent: { backgroundColor: COLORS.background, paddingBottom: 30 },
+  separator: { height: 2, backgroundColor: COLORS.background },
+  userSearchCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.backgroundLight, padding: 12, borderRadius: 12, marginBottom: 10, shadowColor: '#000', shadowOpacity: 0.05, shadowOffset: { width: 0, height: 2 }, shadowRadius: 4, elevation: 2 },
+  searchAvatarContainer: { marginRight: 12 },
+  searchName: { fontSize: 16, fontWeight: '700', color: COLORS.textPrimary },
+  searchProgram: { fontSize: 12, color: COLORS.textSecondary }
 });

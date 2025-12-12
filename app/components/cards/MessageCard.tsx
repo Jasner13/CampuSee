@@ -9,8 +9,8 @@ interface MessageCardProps {
   messagePreview: string;
   time: string;
   initials: string;
-  avatarUrl?: string | null; // <--- This prop must be defined here
-  isOnline?: boolean;
+  avatarUrl?: string | null;
+  isOnline?: boolean; // <--- Now passed directly to Avatar
   isUnread?: boolean;
   onPress?: () => void;
 }
@@ -32,20 +32,13 @@ export const MessageCard: React.FC<MessageCardProps> = ({
       activeOpacity={0.7}
     >
       <View style={styles.content}>
-        <View style={styles.avatarContainer}>
-          <Avatar 
-            initials={initials} 
-            avatarUrl={avatarUrl} 
-            size="small" 
-          />
-          {isOnline && (
-            <View style={styles.onlinePing}>
-              <Svg width={12} height={12} viewBox="0 0 12 12">
-                <Circle cx="6" cy="6" r="5" fill="#10B981" stroke={COLORS.backgroundLight} strokeWidth="2" />
-              </Svg>
-            </View>
-          )}
-        </View>
+        {/* Pass isOnline directly to Avatar */}
+        <Avatar 
+          initials={initials} 
+          avatarUrl={avatarUrl} 
+          size="small" 
+          isOnline={isOnline}
+        />
         
         <View style={styles.messageContent}>
           <Text style={[styles.name, isUnread && styles.nameUnread]}>{name}</Text>
@@ -89,14 +82,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
     flex: 1,
-  },
-  avatarContainer: {
-    position: 'relative',
-  },
-  onlinePing: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
   },
   messageContent: {
     flex: 1,

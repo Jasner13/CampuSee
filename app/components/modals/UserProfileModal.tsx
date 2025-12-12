@@ -17,7 +17,7 @@ interface UserProfileModalProps {
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onClose, userId }) => {
-  const { session } = useAuth();
+  const { session, onlineUsers } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   
   const [profile, setProfile] = useState<any>(null);
@@ -27,6 +27,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   
   const [stats, setStats] = useState({ posts: 0, followers: 0, following: 0 });
   const [userPosts, setUserPosts] = useState<any[]>([]);
+
+  const isOnline = onlineUsers.has(userId);
 
   useEffect(() => {
     if (visible && userId) {
@@ -163,10 +165,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const renderHeader = () => (
     <>
         <View style={styles.profileHeader}>
-            <Image 
-                source={{ uri: profile.avatar_url || 'https://via.placeholder.com/100' }} 
-                style={styles.avatar} 
-            />
+            <View style={{ position: 'relative' }}>
+                <Image 
+                    source={{ uri: profile.avatar_url || 'https://via.placeholder.com/100' }} 
+                    style={styles.avatar} 
+                />
+                {isOnline && (
+                    <View style={styles.onlineBadge} />
+                )}
+            </View>
             <Text style={styles.name}>{profile.full_name}</Text>
             <Text style={styles.program}>{profile.program || 'Student'}</Text>
             
@@ -292,6 +299,17 @@ const styles = StyleSheet.create({
     height: 90,
     borderRadius: 45,
     marginBottom: 16,
+    borderWidth: 3,
+    borderColor: COLORS.background,
+  },
+  onlineBadge: {
+    position: 'absolute',
+    bottom: 16, // Adjust based on avatar margin
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.success,
     borderWidth: 3,
     borderColor: COLORS.background,
   },
