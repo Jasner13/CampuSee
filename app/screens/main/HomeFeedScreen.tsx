@@ -22,6 +22,7 @@ import { PostCard, Post } from '../../components/cards/PostCard';
 import { BottomNav } from '../../components/BottomNav';
 import { UserProfileModal } from '../../components/modals/UserProfileModal';
 import { SharePostModal } from '../../components/modals/SharePostModal';
+import { PostLikesModal } from '../../components/modals/PostLikesModal'; // <--- IMPORTED
 import { GRADIENTS, COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { CATEGORIES, CategoryType } from '../../constants/categories';
@@ -66,8 +67,13 @@ export const HomeFeedScreen: React.FC = () => {
   // Modal States
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [userModalVisible, setUserModalVisible] = useState(false);
+  
   const [selectedPostToShare, setSelectedPostToShare] = useState<Post | null>(null);
   const [shareModalVisible, setShareModalVisible] = useState(false);
+
+  // Likes Modal State
+  const [likesModalVisible, setLikesModalVisible] = useState(false);
+  const [selectedPostIdForLikes, setSelectedPostIdForLikes] = useState<string | null>(null);
 
   const fetchPosts = async () => {
     try {
@@ -182,6 +188,12 @@ export const HomeFeedScreen: React.FC = () => {
       setShareModalVisible(true);
   };
 
+  // NEW HANDLER FOR LIKES
+  const handleLikesPress = (post: Post) => {
+    setSelectedPostIdForLikes(post.id);
+    setLikesModalVisible(true);
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -274,6 +286,7 @@ export const HomeFeedScreen: React.FC = () => {
                 onPress={() => handlePostPress(post)}
                 onProfilePress={handleUserPress}
                 onSharePress={handleSharePress}
+                onLikesPress={handleLikesPress} // <--- PASSING THE PROP
             />
           ))
         )}
@@ -297,6 +310,14 @@ export const HomeFeedScreen: React.FC = () => {
             post={selectedPostToShare}
           />
       )}
+
+      {/* LIKES MODAL */}
+      <PostLikesModal 
+        visible={likesModalVisible}
+        onClose={() => setLikesModalVisible(false)}
+        postId={selectedPostIdForLikes}
+        onUserPress={handleUserPress} 
+      />
 
     </View>
   );
@@ -384,7 +405,7 @@ const styles = StyleSheet.create({
   },
   feedContent: {
     padding: 18,
-    gap: 16,
+    gap: 8,
     paddingBottom: 100,
   },
   emptyState: {
