@@ -18,7 +18,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { Feather } from '@expo/vector-icons'; 
+import { Feather, Ionicons } from '@expo/vector-icons'; 
 
 import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
@@ -53,22 +53,65 @@ export default function NotificationsScreen() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   // --- Menu State ---
-  // We only track the ID of the currently open menu
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [showDeleteAllMenu, setShowDeleteAllMenu] = useState(false);
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return '??';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
+  // Sleek Icon Configuration
   const getNotificationConfig = (type: string) => {
     switch (type) {
-      case 'like': return { icon: '❤️', bg: '#FFE0F0', action: 'liked your post.' };
-      case 'comment': return { icon: '💬', bg: '#D1FAE5', action: 'commented:' };
-      case 'follow': return { icon: null, bg: 'transparent', action: 'started following you.' };
-      case 'event': return { icon: '📅', bg: '#E9D5FF', action: 'posted a new event:' };
-      case 'announcement': return { icon: '📢', bg: '#FEF3C7', action: 'Announcement:' };
-      default: return { icon: '🔔', bg: '#F3F4F6', action: 'notification' };
+      case 'like': 
+        return { 
+          icon: 'heart', 
+          family: 'Feather', 
+          color: '#F43F5E', 
+          bg: '#FFE4E6', 
+          action: 'liked your post.' 
+        };
+      case 'comment': 
+        return { 
+          icon: 'message-circle', 
+          family: 'Feather', 
+          color: '#10B981', 
+          bg: '#D1FAE5', 
+          action: 'commented:' 
+        };
+      case 'follow': 
+        return { 
+          icon: null, 
+          family: null, 
+          color: 'transparent', 
+          bg: 'transparent', 
+          action: 'started following you.' 
+        };
+      case 'event': 
+        return { 
+          icon: 'calendar', 
+          family: 'Feather', 
+          color: '#8B5CF6', 
+          bg: '#EDE9FE', 
+          action: 'posted a new event:' 
+        };
+      case 'announcement': 
+        return { 
+          icon: 'megaphone-outline', 
+          family: 'Ionicons', 
+          color: '#F59E0B', 
+          bg: '#FEF3C7', 
+          action: 'Announcement:' 
+        };
+      default: 
+        return { 
+          icon: 'bell', 
+          family: 'Feather', 
+          color: '#6B7280', 
+          bg: '#F3F4F6', 
+          action: 'notification' 
+        };
     }
   };
 
@@ -85,6 +128,15 @@ export default function NotificationsScreen() {
   const fetchNotifications = async () => {
     if (!session?.user) return;
     try {
+      // 1. Fetch Muted Posts first
+      const { data: mutedData } = await supabase
+        .from('muted_posts')
+        .select('post_id')
+        .eq('user_id', session.user.id);
+      
+      const mutedPostIds = new Set(mutedData?.map(m => m.post_id) || []);
+
+      // 2. Fetch Notifications
       const { data, error } = await supabase
         .from('notifications')
         .select(`
@@ -117,7 +169,12 @@ export default function NotificationsScreen() {
           actor: Array.isArray(item.actor) ? item.actor[0] : item.actor
         }))
         .filter(n => {
+            // Filter invalid types
             if (['like', 'comment', 'event'].includes(n.type) && !n.resource_id) {
+                return false;
+            }
+            // Filter MUTED posts
+            if (n.resource_id && mutedPostIds.has(n.resource_id)) {
                 return false;
             }
             return true;
@@ -140,7 +197,10 @@ export default function NotificationsScreen() {
         .on(
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${session?.user.id}` },
-          () => fetchNotifications()
+          (payload) => {
+             // Optional: Check if the new notification is for a muted post (though trigger handles most)
+             fetchNotifications();
+          }
         )
         .subscribe();
       return () => { supabase.removeChannel(channel) };
@@ -152,10 +212,33 @@ export default function NotificationsScreen() {
     fetchNotifications();
   };
 
-  const handleMarkAllRead = async () => {
+  const toggleDeleteAllMenu = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setShowDeleteAllMenu(prev => !prev);
+    setOpenMenuId(null); // Close other menus
+  };
+
+  const handleDeleteAll = async () => {
     if (!session?.user) return;
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', session.user.id);
+    
+    // Optimistic Update: clear screen immediately
+    setNotifications([]);
+    setShowDeleteAllMenu(false);
+
+    try {
+        const { error } = await supabase
+            .from('notifications')
+            .delete()
+            .eq('user_id', session.user.id);
+            
+        if (error) {
+            console.error("Delete all error:", error);
+            throw error;
+        }
+    } catch (err) {
+        Alert.alert("Error", "Could not delete all notifications.");
+        fetchNotifications(); // Revert on error
+    }
   };
 
   const handleNavigateToPost = async (resourceId: string) => {
@@ -242,9 +325,8 @@ export default function NotificationsScreen() {
       return;
     }
     // If another menu is open, close it
-    if (openMenuId) {
-      setOpenMenuId(null);
-    }
+    if (openMenuId) setOpenMenuId(null);
+    if (showDeleteAllMenu) setShowDeleteAllMenu(false);
 
     if (!notification.is_read) {
       setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
@@ -268,11 +350,32 @@ export default function NotificationsScreen() {
   const toggleMenu = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setOpenMenuId(prev => prev === id ? null : id);
+    setShowDeleteAllMenu(false);
   };
 
-  const handleTurnOffNotification = () => {
+  const handleTurnOffNotification = async (resourceId?: string | null) => {
+    if (!resourceId || !session?.user) {
+        setOpenMenuId(null);
+        return;
+    }
+
     Alert.alert("Notifications", "You will no longer receive updates about this post.");
     setOpenMenuId(null);
+
+    // 1. Optimistic Update: Remove all notifications for this resource from view
+    setNotifications(prev => prev.filter(n => n.resource_id !== resourceId));
+
+    try {
+        // 2. Insert into muted_posts table (Backend Logic)
+        const { error } = await supabase
+            .from('muted_posts')
+            .insert({ user_id: session.user.id, post_id: resourceId });
+
+        if (error) throw error;
+    } catch (err) {
+        console.error("Failed to mute post:", err);
+        // Optionally fetchNotifications() to revert if failed
+    }
   };
 
   const handleDeleteNotification = async (id: string) => {
@@ -295,9 +398,28 @@ export default function NotificationsScreen() {
           <Text style={styles.backIcon}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
-        <TouchableOpacity style={styles.markAllButton} activeOpacity={0.7} onPress={handleMarkAllRead}>
-          <Text style={styles.markAllIcon}>✉️</Text>
-        </TouchableOpacity>
+        
+        {/* Delete All Button (Top Right) */}
+        <View style={{ position: 'relative', zIndex: 2000 }}>
+            <TouchableOpacity 
+                style={styles.headerButton} 
+                activeOpacity={0.7} 
+                onPress={toggleDeleteAllMenu}
+            >
+                <Feather name="trash-2" size={22} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+
+            {showDeleteAllMenu && (
+                 <View style={styles.headerMenu}>
+                    <TouchableOpacity 
+                        style={styles.headerMenuItem} 
+                        onPress={handleDeleteAll}
+                    >
+                         <Text style={styles.headerMenuText}>Delete All</Text>
+                    </TouchableOpacity>
+                 </View>
+            )}
+        </View>
       </View>
 
       {navigating && (
@@ -326,6 +448,7 @@ export default function NotificationsScreen() {
             let displayContent = notification.content || '';
             const isMenuOpen = openMenuId === notification.id;
 
+            // Cleanup content text
             if (notification.type === 'comment') {
                 displayContent = displayContent.replace(/^Commented:\s*/i, '');
                 displayContent = `"${displayContent}"`;
@@ -345,7 +468,7 @@ export default function NotificationsScreen() {
                 style={[
                     styles.notificationItem, 
                     !notification.is_read && { backgroundColor: '#F0F9FF' },
-                    { zIndex: isMenuOpen ? 1000 : 1 } // Ensure menu appears above next items
+                    { zIndex: isMenuOpen ? 1000 : 1 }
                 ]}
                 activeOpacity={0.9}
                 onPress={() => handleNotificationPress(notification)}
@@ -358,7 +481,11 @@ export default function NotificationsScreen() {
                         </View>
                     ) : (
                         <View style={[styles.iconContainer, { backgroundColor: config.bg }]}>
-                            <Text style={styles.notificationIcon}>{config.icon}</Text>
+                            {config.family === 'Ionicons' ? (
+                                <Ionicons name={config.icon as any} size={24} color={config.color} />
+                            ) : (
+                                <Feather name={config.icon as any} size={24} color={config.color} />
+                            )}
                         </View>
                     )}
                 </View>
@@ -378,7 +505,7 @@ export default function NotificationsScreen() {
                   <TouchableOpacity 
                     style={styles.moreButton} 
                     onPress={(e) => {
-                        e.stopPropagation(); // Prevent item press
+                        e.stopPropagation(); 
                         toggleMenu(notification.id);
                     }}
                     hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
@@ -386,17 +513,22 @@ export default function NotificationsScreen() {
                      <Feather name="more-horizontal" size={20} color={COLORS.textTertiary} />
                   </TouchableOpacity>
 
-                  {/* Minimalist Dropdown Menu */}
+                  {/* Minimalist Inline Menu */}
                   {isMenuOpen && (
                     <View style={styles.inlineMenu}>
-                        <TouchableOpacity 
-                            style={styles.inlineMenuItem} 
-                            onPress={(e) => { e.stopPropagation(); handleTurnOffNotification(); }}
-                        >
-                            <Feather name="bell-off" size={14} color={COLORS.textPrimary} />
-                            <Text style={styles.inlineMenuText}>Turn off</Text>
-                        </TouchableOpacity>
-                        <View style={styles.inlineMenuDivider} />
+                        {/* Only show Turn Off if it's related to a resource (Post) */}
+                        {notification.resource_id && (
+                            <>
+                                <TouchableOpacity 
+                                    style={styles.inlineMenuItem} 
+                                    onPress={(e) => { e.stopPropagation(); handleTurnOffNotification(notification.resource_id); }}
+                                >
+                                    <Feather name="bell-off" size={14} color={COLORS.textPrimary} />
+                                    <Text style={styles.inlineMenuText}>Turn off</Text>
+                                </TouchableOpacity>
+                                <View style={styles.inlineMenuDivider} />
+                            </>
+                        )}
                         <TouchableOpacity 
                             style={styles.inlineMenuItem} 
                             onPress={(e) => { e.stopPropagation(); handleDeleteNotification(notification.id); }}
@@ -426,12 +558,40 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, backgroundColor: COLORS.backgroundLight, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16, backgroundColor: COLORS.backgroundLight, borderBottomWidth: 1, borderBottomColor: COLORS.border, zIndex: 2000 },
   backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   backIcon: { fontSize: 24, color: COLORS.textPrimary },
   headerTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary },
-  markAllButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-  markAllIcon: { fontSize: 22 },
+  headerButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  
+  // Header Menu (Delete All)
+  headerMenu: {
+      position: 'absolute',
+      top: 45,
+      right: 0,
+      backgroundColor: '#FFFFFF',
+      borderRadius: 8,
+      paddingVertical: 4,
+      shadowColor: '#000',
+      shadowOpacity: 0.15,
+      shadowOffset: { width: 0, height: 4 },
+      shadowRadius: 10,
+      elevation: 10,
+      minWidth: 160,
+      borderWidth: 1,
+      borderColor: '#F1F5F9',
+  },
+  headerMenuItem: {
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      justifyContent: 'center',
+  },
+  headerMenuText: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: '#EF4444', // Red for delete action
+  },
+
   notificationsContainer: { flex: 1, backgroundColor: COLORS.backgroundLight },
   notificationsContent: { paddingBottom: 30 },
   notificationItem: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: COLORS.border, backgroundColor: COLORS.backgroundLight },
@@ -439,7 +599,6 @@ const styles = StyleSheet.create({
   iconContainer: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
   avatarWrapper: { position: 'relative', padding: 4 },
   followBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#DBEAFE', width: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#FFF' },
-  notificationIcon: { fontSize: 24 },
   notificationContent: { flex: 1, paddingRight: 8, justifyContent: 'center', minHeight: 48 },
   notificationText: { fontSize: 15, lineHeight: 22, marginBottom: 4, flexWrap: 'wrap' },
   userName: { fontWeight: '700', color: COLORS.textPrimary },
@@ -447,13 +606,12 @@ const styles = StyleSheet.create({
   postTitle: { fontWeight: '500', color: COLORS.textPrimary, fontStyle: 'italic' },
   timestamp: { fontSize: 13, color: COLORS.textTertiary, marginTop: 2 },
   
-  // Right Actions & Menu
   rightActionsContainer: {
     alignItems: 'center',
     justifyContent: 'flex-start',
     gap: 8,
     paddingTop: 4,
-    position: 'relative', // Context for absolute menu
+    position: 'relative',
   },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.primary },
   moreButton: {
