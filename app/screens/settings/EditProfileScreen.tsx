@@ -12,7 +12,7 @@ import {
   Image,
   Platform
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -20,18 +20,20 @@ import { decode } from 'base64-arraybuffer';
 import { COLORS, GRADIENTS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { RootStackParamList } from '../../navigation/types';
 import { Profile } from '../../types';
 
-type EditProfileRouteProp = RouteProp<RootStackParamList, 'EditProfile'>;
+// NOTE: Programs list could be moved to a shared constant file later
+const PROGRAMS = [
+  'BS Computer Engineering',
+  'BS Computer Science',
+  'BS Information Technology',
+  'BS Software Engineering',
+  'BS Information Systems',
+];
 
 export default function EditProfileScreen() {
   const navigation = useNavigation();
-  const route = useRoute<EditProfileRouteProp>();
   const { session, refreshProfile } = useAuth();
-
-  // Check if we are in "Setup Mode" (New User)
-  const isNewUser = route.params?.isNewUser || false;
 
   // State for form fields
   const [name, setName] = useState('');
@@ -47,14 +49,6 @@ export default function EditProfileScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showProgramDropdown, setShowProgramDropdown] = useState(false);
-
-  const programs = [
-    'BS Computer Engineering',
-    'BS Computer Science',
-    'BS Information Technology',
-    'BS Software Engineering',
-    'BS Information Systems',
-  ];
 
   useEffect(() => {
     if (session?.user) {
@@ -76,7 +70,6 @@ export default function EditProfileScreen() {
       if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
-        // Safe casting to Central Profile Type
         const profileData = data as Profile;
         setName(profileData.full_name || '');
         setProgram(profileData.program || '');
@@ -93,13 +86,10 @@ export default function EditProfileScreen() {
   };
 
   const handleBack = () => {
-    if (isNewUser) return;
     navigation.goBack();
   };
 
-  // ---------------------------------------------------------------------------
-  // 2. FIXED IMAGE PICKER LOGIC (SDK 52+ Compatible)
-  // ---------------------------------------------------------------------------
+  // --- Image Picker Logic ---
   const handleChangePhoto = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
@@ -113,7 +103,7 @@ export default function EditProfileScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.5,
-      base64: true, // Essential for uploading to Supabase
+      base64: true, // Needed for Supabase Upload
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -127,9 +117,6 @@ export default function EditProfileScreen() {
     }
   };
 
-  // ---------------------------------------------------------------------------
-  // 3. UPLOAD LOGIC
-  // ---------------------------------------------------------------------------
   const uploadAvatar = async () => {
     if (!avatarBase64 || !session?.user) return null;
 
@@ -162,11 +149,6 @@ export default function EditProfileScreen() {
       return;
     }
 
-    if (!program) {
-      Alert.alert('Error', 'Please select a program');
-      return;
-    }
-
     try {
       setIsSaving(true);
       if (!session?.user) throw new Error('No user on the session!');
@@ -194,11 +176,9 @@ export default function EditProfileScreen() {
 
       await refreshProfile();
 
-      if (!isNewUser) {
-        Alert.alert('Success', 'Profile updated!', [
-          { text: 'OK', onPress: () => navigation.goBack() },
-        ]);
-      }
+      Alert.alert('Success', 'Profile updated!', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
 
     } catch (error) {
       if (error instanceof Error) {
@@ -218,7 +198,7 @@ export default function EditProfileScreen() {
   const maxBioLength = 200;
 
   const getInitials = () => {
-    if (!name) return 'JL';
+    if (!name) return '??';
     const parts = name.trim().split(' ');
     if (parts.length >= 2) {
       return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -240,14 +220,9 @@ export default function EditProfileScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        {!isNewUser ? (
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Ionicons name="chevron-back" size={24} color="#1F2937" />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.backButton} />
-        )}
-
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <Ionicons name="chevron-back" size={24} color="#1F2937" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>
         <View style={styles.placeholder} />
       </View>
@@ -291,7 +266,7 @@ export default function EditProfileScreen() {
               style={styles.input}
               value={name}
               onChangeText={setName}
-              placeholder="John Lawrence Villamor"
+              placeholder="Full Name"
               placeholderTextColor="#D1D5DB"
             />
           </View>
@@ -307,7 +282,7 @@ export default function EditProfileScreen() {
           >
             <Ionicons name="school-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
             <Text style={[styles.dropdownText, !program && { color: '#D1D5DB' }]}>
-              {program || 'BS Computer Engineering'}
+              {program || 'Select Program'}
             </Text>
             <Ionicons 
               name={showProgramDropdown ? "chevron-up" : "chevron-down"} 
@@ -318,13 +293,13 @@ export default function EditProfileScreen() {
 
           {showProgramDropdown && (
             <View style={styles.dropdownMenu}>
-              {programs.map((prog, index) => (
+              {PROGRAMS.map((prog, index) => (
                 <TouchableOpacity
                   key={index}
                   style={[
                     styles.dropdownItem,
                     prog === program && styles.dropdownItemSelected,
-                    index === programs.length - 1 && { borderBottomWidth: 0 }
+                    index === PROGRAMS.length - 1 && { borderBottomWidth: 0 }
                   ]}
                   onPress={() => selectProgram(prog)}
                 >
@@ -386,7 +361,6 @@ export default function EditProfileScreen() {
             </>
           )}
         </TouchableOpacity>
-
       </ScrollView>
     </View>
   );

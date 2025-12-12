@@ -9,6 +9,7 @@ import { AuthNavigator } from './AuthNavigator';
 import { MainNavigator } from './MainNavigator';
 import SettingsScreen from '../screens/settings/SettingsScreen';
 import EditProfileScreen from '../screens/settings/EditProfileScreen';
+import SetupProfileScreen from '../screens/auth/SetupProfileScreen';
 import ChangePasswordScreen from '../screens/settings/ChangePasswordScreen';
 import PostDetailScreen from '../screens/main/PostDetailScreen';
 import MessagesScreenChat from '../screens/main/MessagesScreenChat';
@@ -35,15 +36,17 @@ export const AppNavigator: React.FC = () => {
       }}
     >
       {!isAuthenticated ? (
+        // Case 1: Not Logged In -> Show Auth Flow
         <Stack.Screen name="Auth" component={AuthNavigator} />
       ) : !profile?.full_name ? (
+        // Case 2: Logged In but No Name -> Show Setup Flow
         <Stack.Screen 
           name="SetupProfile" 
-          component={EditProfileScreen} 
-          initialParams={{ isNewUser: true }}
-          options={{ animation: 'fade', gestureEnabled: false }}
+          component={SetupProfileScreen} 
+          options={{ animation: 'fade', gestureEnabled: false }} 
         />
       ) : (
+        // Case 3: Logged In & Has Name -> Show Main App
         <>
           <Stack.Screen name="Main" component={MainNavigator} />
           
