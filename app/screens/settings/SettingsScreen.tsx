@@ -3,12 +3,17 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, Switch, Alert, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { Feather } from '@expo/vector-icons'; // Import Feather icons
+import { Feather } from '@expo/vector-icons';
 import type { MainTabParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { Profile } from '../../types';
+
+// Import Modals
+import { HelpSupportModal } from '../../components/modals/HelpSupportModal';
+import { TermsOfServiceModal } from '../../components/modals/TermsOfServiceModal';
+import { PrivacyPolicyModal } from '../../components/modals/PrivacyPolicyModal';
 
 type SettingsScreenNavigationProp = BottomTabNavigationProp<MainTabParamList, 'Settings'>;
 type UserSettings = NonNullable<Profile['settings']>;
@@ -17,7 +22,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   replies_to_posts: true,
   new_messages: true,
   post_interactions: true,
-  active_status: true, // Default to true
+  active_status: true,
 };
 
 export default function SettingsScreen() {
@@ -27,7 +32,11 @@ export default function SettingsScreen() {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 1. Fetch Settings on Load
+  // Modal State
+  const [isHelpVisible, setHelpVisible] = useState(false);
+  const [isTermsVisible, setTermsVisible] = useState(false);
+  const [isPrivacyVisible, setPrivacyVisible] = useState(false);
+
   useEffect(() => {
     fetchSettings();
   }, []);
@@ -45,7 +54,6 @@ export default function SettingsScreen() {
       if (error) throw error;
 
       if (data?.settings) {
-        // Merge with defaults in case we add new keys later
         setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
       }
     } catch (error) {
@@ -55,9 +63,7 @@ export default function SettingsScreen() {
     }
   };
 
-  // 2. Generic Toggle Handler
   const toggleSetting = async (key: keyof UserSettings, value: boolean) => {
-    // Optimistic Update: Update UI immediately
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
 
@@ -71,12 +77,10 @@ export default function SettingsScreen() {
 
       if (error) throw error;
       
-      // Refresh global profile so AuthContext knows about the change immediately
       await refreshProfile(); 
 
     } catch (error) {
       Alert.alert('Error', 'Failed to save setting');
-      // Revert on error
       setSettings(settings);
     }
   };
@@ -93,16 +97,17 @@ export default function SettingsScreen() {
     navigation.navigate('ChangePassword' as any);
   };
 
+  // Open Modals
   const handleHelpSupport = () => {
-    Alert.alert('Support', 'Contact us at support@campusee.edu');
+    setHelpVisible(true);
   };
 
   const handleTermsOfService = () => {
-    console.log('Terms of Service pressed');
+    setTermsVisible(true);
   };
 
   const handlePrivacyPolicy = () => {
-    console.log('Privacy Policy pressed');
+    setPrivacyVisible(true);
   };
 
   const handleLogOut = () => {
@@ -306,6 +311,22 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </ScrollView>
       )}
+
+      {/* Modals */}
+      <HelpSupportModal 
+        visible={isHelpVisible} 
+        onClose={() => setHelpVisible(false)} 
+      />
+      
+      <TermsOfServiceModal 
+        visible={isTermsVisible} 
+        onClose={() => setTermsVisible(false)} 
+      />
+
+      <PrivacyPolicyModal 
+        visible={isPrivacyVisible} 
+        onClose={() => setPrivacyVisible(false)} 
+      />
     </View>
   );
 }
@@ -361,7 +382,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.backgroundLight,
-    paddingVertical: 12, // Slightly reduced vertical padding for better density
+    paddingVertical: 12, 
     paddingHorizontal: 16,
     borderRadius: 12,
     marginBottom: 8,
@@ -370,7 +391,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#EEF2FF', // Sleek light primary background
+    backgroundColor: '#EEF2FF',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
