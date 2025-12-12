@@ -39,6 +39,28 @@ type MessagesScreenChatRouteProp = RouteProp<RootStackParamList, 'MessagesChat'>
 // Max file size for chat (e.g., 10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
+// Helper: Format "Last Seen"
+const formatLastSeen = (dateString?: string | null) => {
+  if (!dateString) return 'Offline';
+  
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return 'Active just now';
+  
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `Active ${diffInMinutes}m ago`;
+  
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `Active ${diffInHours}h ago`;
+  
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) return `Active ${diffInDays}d ago`;
+  
+  return `Last seen ${date.toLocaleDateString()}`;
+};
+
 export default function MessagesScreenChat() {
   const navigation = useNavigation<MessagesScreenChatNavigationProp>();
   const route = useRoute<MessagesScreenChatRouteProp>();
@@ -49,8 +71,9 @@ export default function MessagesScreenChat() {
   const [messageText, setMessageText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [peerLastSeen, setPeerLastSeen] = useState<string | null>(null);
 
-  // Check if peer is online
+  // Check if peer is online via Realtime Presence
   const isPeerOnline = onlineUsers.has(peerId);
 
   // --- Attachment State ---
@@ -71,6 +94,22 @@ export default function MessagesScreenChat() {
   const handleBack = () => {
     navigation.goBack();
   };
+
+  // --- Fetch Peer Profile for Last Seen ---
+  useEffect(() => {
+    const fetchPeerStatus = async () => {
+        const { data } = await supabase
+            .from('profiles')
+            .select('last_seen')
+            .eq('id', peerId)
+            .single();
+        
+        if (data) {
+            setPeerLastSeen(data.last_seen);
+        }
+    };
+    fetchPeerStatus();
+  }, [peerId]);
 
   // --- Keyboard Listener for Android Fix ---
   useEffect(() => {
@@ -376,17 +415,14 @@ export default function MessagesScreenChat() {
           if (content && content.trim().startsWith('{')) {
               const parsed = JSON.parse(content);
 
-              // 1. Shared Post (Updated for Preview of Images, Videos, and Documents)
+              // 1. Shared Post
               if (parsed.type === 'share_post') {
                   const fileUrl = parsed.thumbnail;
-                  
-                  // Helper to get extension
                   const getExt = (url: string) => url?.split('?')[0]?.split('.')?.pop()?.toLowerCase() || '';
                   const ext = getExt(fileUrl);
                   
                   const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
                   const isVideo = ['mp4', 'mov', 'avi', '3gp'].includes(ext);
-                  // If it has a URL but isn't image/video, assume it's a document
                   const isDocument = fileUrl && !isImage && !isVideo;
 
                   return (
@@ -402,7 +438,6 @@ export default function MessagesScreenChat() {
                               </Text>
                           </View>
                           <View style={styles.sharedPostCard}>
-                              {/* Preview Image */}
                               {fileUrl && isImage && (
                                   <Image 
                                     source={{ uri: fileUrl }} 
@@ -411,14 +446,12 @@ export default function MessagesScreenChat() {
                                   />
                               )}
                               
-                              {/* Preview Video */}
                               {fileUrl && isVideo && (
                                   <View style={[styles.sharedPostImage, styles.sharedPostVideoPlaceholder]}>
                                       <Ionicons name="play-circle" size={32} color="white" />
                                   </View>
                               )}
 
-                              {/* Preview Document */}
                               {fileUrl && isDocument && (
                                   <View style={styles.sharedPostFileContainer}>
                                       <View style={styles.sharedPostFileIcon}>
@@ -500,9 +533,7 @@ export default function MessagesScreenChat() {
                   );
               }
           }
-      } catch (e) {
-          // Not JSON
-      }
+      } catch (e) {}
 
       // Default Text
       return (
@@ -537,8 +568,9 @@ export default function MessagesScreenChat() {
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerName}>{peerName}</Text>
+            {/* --- UPDATED STATUS LOGIC --- */}
             <Text style={[styles.headerStatus, isPeerOnline ? { color: COLORS.success } : { color: COLORS.textTertiary }]}>
-                {isPeerOnline ? 'Active now' : 'Offline'}
+                {isPeerOnline ? 'Active now' : formatLastSeen(peerLastSeen)}
             </Text>
           </View>
         </View>
@@ -619,7 +651,6 @@ export default function MessagesScreenChat() {
           )}
 
           <View style={styles.inputWrapper}>
-            {/* Attachment Button */}
             <TouchableOpacity 
                 style={styles.attachButton}
                 onPress={handleAttachmentButtonPress}
@@ -788,7 +819,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: 8,
   },
-  // --- Shared Post Styles ---
   sharedPostContainer: {
       minWidth: 200,
   },
@@ -821,7 +851,6 @@ const styles = StyleSheet.create({
       justifyContent: 'center',
       backgroundColor: '#000',
   },
-  // New Styles for Document Preview in Share Post
   sharedPostFileContainer: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -862,7 +891,6 @@ const styles = StyleSheet.create({
       fontWeight: '600',
       alignSelf: 'flex-end',
   },
-  // --- New Attachment Styles ---
   messageImage: {
       width: 200,
       height: 200,

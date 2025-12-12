@@ -7,11 +7,12 @@ export interface Profile {
     program: string | null;
     avatar_url: string | null;
     bio: string | null;
+    last_seen?: string | null; // <--- ADDED
     settings: {
         replies_to_posts?: boolean;
         new_messages?: boolean;
         post_interactions?: boolean;
-        active_status?: boolean; // <--- ADDED
+        active_status?: boolean; 
         [key: string]: any;
     } | null;
     updated_at: string | null;
@@ -53,6 +54,7 @@ export interface ConversationView {
     receiver_id: string;
     peer_name: string | null;
     peer_avatar: string | null;
+    last_seen?: string | null; // <--- ADDED
 }
 
 export interface Post {

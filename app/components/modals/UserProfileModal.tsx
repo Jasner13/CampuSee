@@ -1,4 +1,3 @@
-// app/components/modals/UserProfileModal.tsx
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, ActivityIndicator, Alert, FlatList, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +14,28 @@ interface UserProfileModalProps {
   onClose: () => void;
   userId: string;
 }
+
+// Helper: Format "Last Seen"
+const formatLastSeen = (dateString?: string | null) => {
+  if (!dateString) return 'Offline';
+  
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return 'Active just now';
+  
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `Active ${diffInMinutes}m ago`;
+  
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `Active ${diffInHours}h ago`;
+  
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) return `Active ${diffInDays}d ago`;
+  
+  return `Last seen ${date.toLocaleDateString()}`;
+};
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onClose, userId }) => {
   const { session, onlineUsers } = useAuth();
@@ -175,6 +196,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 )}
             </View>
             <Text style={styles.name}>{profile.full_name}</Text>
+            
+            {/* Status Indicator Text */}
+            <Text style={[styles.statusText, isOnline ? { color: COLORS.success } : { color: COLORS.textTertiary }]}>
+                {isOnline ? 'Active now' : formatLastSeen(profile.last_seen)}
+            </Text>
+
             <Text style={styles.program}>{profile.program || 'Student'}</Text>
             
             {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
@@ -319,6 +346,11 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontFamily: FONTS.bold,
     marginBottom: 4,
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 8,
   },
   program: {
     fontSize: 14,
