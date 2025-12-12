@@ -112,7 +112,7 @@ export default function MessagesScreen() {
     setDeleteModalVisible(true);
   };
 
-  // 2. Perform Delete
+  // 2. Perform Soft Delete (Hidden for current user only)
   const confirmDeleteConversation = async () => {
     if (!conversationToDelete || !session?.user) return;
     
@@ -120,14 +120,14 @@ export default function MessagesScreen() {
     const { id: peerId } = conversationToDelete;
 
     try {
-      const { error } = await supabase
-        .from('messages')
-        .delete()
-        .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${peerId}),and(sender_id.eq.${peerId},receiver_id.eq.${session.user.id})`);
+      // Calls the Postgres function to append user ID to 'deleted_by' array
+      const { error } = await supabase.rpc('soft_delete_conversation', { 
+        peer_id: peerId 
+      });
         
       if (error) throw error;
 
-      // Optimistic update
+      // Optimistic update: Remove from list immediately
       setConversations(prev => prev.filter(c => c.peer_id !== peerId));
       
       // Close modal
@@ -158,6 +158,7 @@ export default function MessagesScreen() {
     const channel = supabase.channel('public:messages')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
           const changedRecord = payload.new as any; 
+          // Refresh if a message involving me is added/changed
           if (changedRecord && (changedRecord.sender_id === session?.user.id || changedRecord.receiver_id === session?.user.id)) {
             fetchConversations();
           }
@@ -377,10 +378,10 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20, // Reduced radius for compactness
-    padding: 20,      // Reduced padding
+    borderRadius: 20, 
+    padding: 20,      
     width: '100%',
-    maxWidth: 300,    // Reduced max width
+    maxWidth: 300,    
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -389,26 +390,26 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   iconWrapper: {
-    width: 48,        // Smaller icon bg
+    width: 48,        
     height: 48,
     borderRadius: 24,
     backgroundColor: '#FEF2F2',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12, // Reduced spacing
+    marginBottom: 12, 
   },
   modalTitle: {
-    fontSize: 18,     // Smaller title
+    fontSize: 18,     
     fontWeight: '700',
     color: COLORS.textPrimary,
     marginBottom: 8,
     textAlign: 'center',
   },
   modalDescription: {
-    fontSize: 14,     // Smaller description text
+    fontSize: 14,     
     color: COLORS.textSecondary,
     textAlign: 'center',
-    marginBottom: 20, // Reduced spacing
+    marginBottom: 20, 
     lineHeight: 20,
   },
   boldText: {
@@ -422,7 +423,7 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    height: 44,       // Shorter buttons
+    height: 44,       
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -434,7 +435,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EF4444',
   },
   cancelButtonText: {
-    fontSize: 14,     // Adjusted font size
+    fontSize: 14,     
     fontWeight: '600',
     color: '#64748B',
   },
