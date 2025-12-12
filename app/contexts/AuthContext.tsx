@@ -9,7 +9,7 @@ interface AuthContextType {
   profile: Profile | null | undefined;
   isLoading: boolean;
   isAuthenticated: boolean;
-  onlineUsers: Set<string>; // <--- ADDED: List of online user IDs
+  onlineUsers: Set<string>; 
   login: (email: string, password: string) => Promise<{ error: any }>;
   signup: (email: string, password: string) => Promise<{ error: any }>;
   verifyOtp: (email: string, token: string) => Promise<{ error: any }>;
@@ -29,6 +29,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Presence State
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const channelRef = useRef<any>(null);
+  const isTrackedRef = useRef(false); // Prevents duplicate track calls
 
   // 1. Fetch Profile
   const fetchProfile = async (currentSession: Session | null) => {
@@ -78,7 +79,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setSession(newSession);
       if (_event === 'SIGNED_OUT') {
         setProfile(null);
-        setOnlineUsers(new Set()); // Clear online users
+        setOnlineUsers(new Set());
       } else if (newSession) {
         await fetchProfile(newSession);
       }
@@ -88,71 +89,108 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => subscription.unsubscribe();
   }, []);
 
-  // 3. Handle Presence (Active Status)
+  // 3. Setup Presence Channel (Subscribing to others)
   useEffect(() => {
-    if (!session?.user || !profile) return;
-
-    // Helper to check if user wants to be seen
-    // Default to true if setting is missing
-    const isVisible = profile.settings?.active_status !== false;
-
-    // Initialize Channel
-    if (!channelRef.current) {
-      channelRef.current = supabase.channel('global_presence', {
-        config: {
-          presence: {
-            key: session.user.id,
-          },
-        },
-      });
-
-      channelRef.current
-        .on('presence', { event: 'sync' }, () => {
-          const newState = channelRef.current.presenceState();
-          const userIds = new Set(Object.keys(newState));
-          setOnlineUsers(userIds);
-        })
-        .subscribe(async (status: string) => {
-          if (status === 'SUBSCRIBED') {
-            if (isVisible) {
-              await channelRef.current.track({
-                user_id: session.user.id,
-                online_at: new Date().toISOString(),
-              });
-            }
-          }
-        });
-    } else {
-        // If profile settings changed (e.g. active_status toggled)
-        if (isVisible) {
-             channelRef.current.track({
-                user_id: session.user.id,
-                online_at: new Date().toISOString(),
-             });
-        } else {
-             channelRef.current.untrack();
-        }
+    if (!session?.user) {
+        // Clear online users if logged out
+        setOnlineUsers(new Set());
+        return;
     }
 
-    // App State Listener (Background/Foreground)
-    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-        if (!channelRef.current) return;
+    // Only create channel if it doesn't exist
+    if (!channelRef.current) {
+        const channel = supabase.channel('global_presence', {
+            config: {
+                presence: {
+                    key: session.user.id,
+                },
+            },
+        });
 
-        if (nextAppState === 'active' && isVisible) {
-            channelRef.current.track({
-                user_id: session.user.id,
-                online_at: new Date().toISOString(),
-            });
-        } else if (nextAppState.match(/inactive|background/)) {
-            channelRef.current.untrack();
-        }
-    });
+        channel.on('presence', { event: 'sync' }, () => {
+            const newState = channel.presenceState();
+            // Object keys are the 'presence.key' (user_ids) we set in config
+            const userIds = new Set(Object.keys(newState));
+            setOnlineUsers(userIds);
+        });
 
+        channel.subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                // Trigger initial presence check once subscribed
+                handlePresenceLogic();
+            }
+        });
+
+        channelRef.current = channel;
+    }
+
+    // Cleanup on unmount or session change (handled by effect dependency)
     return () => {
-        subscription.remove();
-        // Don't remove channel on every render, only on unmount or logout logic
+        if (channelRef.current) {
+            channelRef.current.unsubscribe();
+            channelRef.current = null;
+            isTrackedRef.current = false;
+        }
     };
-  }, [session?.user?.id, profile?.settings?.active_status]);
+  }, [session?.user?.id]);
+
+  // 4. Handle Self Presence (Tracking) & DB Sync
+  const handlePresenceLogic = async () => {
+      if (!channelRef.current || !session?.user || !profile) return;
+
+      const isAppActive = AppState.currentState === 'active';
+      // Default to visible if setting is undefined
+      const userWantsToBeVisible = profile.settings?.active_status !== false;
+      
+      const shouldBeOnline = isAppActive && userWantsToBeVisible;
+
+      if (shouldBeOnline) {
+          if (!isTrackedRef.current) {
+              const status = await channelRef.current.track({
+                  online_at: new Date().toISOString(),
+                  user_id: session.user.id
+              });
+              
+              if (status === 'ok') {
+                  isTrackedRef.current = true;
+              }
+          }
+      } else {
+          if (isTrackedRef.current) {
+              await channelRef.current.untrack();
+              isTrackedRef.current = false;
+              
+              // If going offline/invisible, update last_seen in DB
+              updateLastSeen();
+          }
+      }
+  };
+
+  const updateLastSeen = async () => {
+      if (!session?.user) return;
+      try {
+          await supabase.from('profiles').update({
+              last_seen: new Date().toISOString()
+          }).eq('id', session.user.id);
+      } catch (err) {
+          console.error("Failed to update last_seen", err);
+      }
+  };
+
+  // Trigger presence logic when:
+  // 1. Profile settings change (user toggles active status)
+  // 2. App State changes (background/foreground)
+  useEffect(() => {
+      handlePresenceLogic();
+
+      const subscription = AppState.addEventListener('change', (nextAppState) => {
+          handlePresenceLogic();
+      });
+
+      return () => {
+          subscription.remove();
+      };
+  }, [profile?.settings?.active_status, session?.user?.id]);
 
 
   // Auth Actions
@@ -182,14 +220,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = async () => {
-    if (channelRef.current) {
+    // Untrack before signing out to ensure immediate "offline" status
+    if (channelRef.current && isTrackedRef.current) {
         await channelRef.current.untrack();
+        await updateLastSeen(); // Save timestamp one last time
+    }
+    
+    if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
     }
+    
     await supabase.auth.signOut();
     setSession(null);
     setProfile(null);
+    setOnlineUsers(new Set());
   };
 
   const refreshProfile = async () => {
@@ -203,7 +248,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         profile,
         isLoading,
         isAuthenticated: !!session,
-        onlineUsers, // <--- Exposed to app
+        onlineUsers, 
         login,
         signup,
         verifyOtp,
