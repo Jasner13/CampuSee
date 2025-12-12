@@ -360,9 +360,6 @@ export default function ProfileScreen() {
           )}
         </View>
       </ScrollView>
-
-
-      <BottomNav selected="profile" onNavigate={handleNavigate} onCreatePost={handleCreatePost} />
     </View>
   );
 }

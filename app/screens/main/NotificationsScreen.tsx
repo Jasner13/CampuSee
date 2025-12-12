@@ -178,8 +178,6 @@ export default function NotificationsScreen() {
           })
         )}
       </ScrollView>
-
-      <BottomNav selected="notifications" onNavigate={handleNavigate} onCreatePost={() => navigation.navigate('CreatePost')} />
     </View>
   );
 }

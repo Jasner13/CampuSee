@@ -286,12 +286,6 @@ export default function MessagesScreen() {
           />
         )
       )}
-
-      <BottomNav
-        selected="messages"
-        onNavigate={handleNavigate}
-        onCreatePost={handleCreatePost}
-      />
     </View>
   );
 }
