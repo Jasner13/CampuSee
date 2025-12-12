@@ -299,7 +299,11 @@ export default function PostDetailScreen() {
         setComments(prev => [...prev, data as ExtendedComment]);
         setReplyingTo(null);
 
-        if (post.userId !== currentUserId && !parentId) {
+        // --- NOTIFICATION LOGIC START ---
+        
+        // 1. Notify Post Author (for direct comments on the post)
+        // Only if it's NOT a reply to a comment, and user isn't commenting on their own post
+        if (!parentId && post.userId !== currentUserId) {
           await supabase.from('notifications').insert({
             user_id: post.userId,
             actor_id: currentUserId,
@@ -310,6 +314,21 @@ export default function PostDetailScreen() {
             is_read: false
           });
         }
+
+        // 2. Notify Parent Comment Author (for replies)
+        // If replying to someone else's comment
+        if (parentId && replyingTo && replyingTo.user_id !== currentUserId) {
+            await supabase.from('notifications').insert({
+                user_id: replyingTo.user_id,
+                actor_id: currentUserId,
+                type: 'comment',
+                title: 'New Reply',
+                content: `Replied: ${commentText.trim().substring(0, 50)}...`,
+                resource_id: post.id, // Link to the same post
+                is_read: false
+            });
+        }
+        // --- NOTIFICATION LOGIC END ---
       }
       
       setCommentText('');
@@ -378,7 +397,6 @@ export default function PostDetailScreen() {
     try { await WebBrowser.openBrowserAsync(post.fileUrl); } catch (err) { Alert.alert('Error', 'Could not open the file.'); }
   };
 
-  // --- THIS IS THE UPDATED FUNCTION ---
   const handleSendPrivateMessage = () => {
     navigation.navigate('MessagesChat', {
       peerId: post.userId,
@@ -391,7 +409,7 @@ export default function PostDetailScreen() {
         description: post.description,
         fileUrl: post.fileUrl,
         fileType: post.fileType,
-        postAuthor: post.authorName // Pass the author name
+        postAuthor: post.authorName 
       }
     });
   };
