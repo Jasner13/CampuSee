@@ -7,7 +7,6 @@ const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 export type ReactionType = 'like' | 'love' | 'haha' | 'wow' | 'sad' | 'angry';
 
 // Manual constant for Binary Content upload (1 = BINARY_CONTENT)
-// This avoids the 'FileSystemUploadType' import error
 const UPLOAD_TYPE_BINARY = 1;
 
 export const PostService = {
@@ -95,7 +94,7 @@ export const PostService = {
                     type: 'event',
                     title: 'New Event',
                     content: `posted a new event: "${title}"`,
-                    resource_id: data.id, // Link to the post
+                    resource_id: data.id, // <--- CRITICAL: Links notification to the post
                     is_read: false
                 }));
 
