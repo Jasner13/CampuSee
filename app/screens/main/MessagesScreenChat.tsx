@@ -1,3 +1,4 @@
+// app/screens/main/MessagesScreenChat.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
@@ -29,7 +30,8 @@ import { Ionicons } from '@expo/vector-icons';
 // --- File Handling Imports ---
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+// UPDATED IMPORT: Using legacy to fix deprecation error
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { Video, ResizeMode } from 'expo-av';
 
@@ -281,6 +283,7 @@ export default function MessagesScreenChat() {
     if (!attachment || !session?.user) return null;
 
     try {
+      // Use legacy FileSystem.readAsStringAsync
       const base64 = await FileSystem.readAsStringAsync(attachment.uri, {
         encoding: 'base64',
       });
