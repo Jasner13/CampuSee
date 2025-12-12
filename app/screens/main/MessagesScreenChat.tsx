@@ -42,13 +42,16 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 export default function MessagesScreenChat() {
   const navigation = useNavigation<MessagesScreenChatNavigationProp>();
   const route = useRoute<MessagesScreenChatRouteProp>();
-  const { session } = useAuth();
+  const { session, onlineUsers } = useAuth();
 
   const { peerId, peerName, peerInitials, peerAvatarUrl } = route.params;
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+
+  // Check if peer is online
+  const isPeerOnline = onlineUsers.has(peerId);
 
   // --- Attachment State ---
   const [attachment, setAttachment] = useState<{
@@ -525,12 +528,18 @@ export default function MessagesScreenChat() {
 
         <View style={styles.headerCenter}>
           <View style={styles.avatarContainer}>
-            <Avatar initials={peerInitials} avatarUrl={peerAvatarUrl} size="default" />
-            <View style={styles.onlineBadge} />
+            <Avatar 
+                initials={peerInitials} 
+                avatarUrl={peerAvatarUrl} 
+                size="default" 
+                isOnline={isPeerOnline}
+            />
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerName}>{peerName}</Text>
-            <Text style={styles.headerStatus}>Active</Text>
+            <Text style={[styles.headerStatus, isPeerOnline ? { color: COLORS.success } : { color: COLORS.textTertiary }]}>
+                {isPeerOnline ? 'Active now' : 'Offline'}
+            </Text>
           </View>
         </View>
       </View>
@@ -679,17 +688,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginRight: 12,
   },
-  onlineBadge: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: COLORS.success,
-    borderWidth: 2,
-    borderColor: COLORS.backgroundLight,
-  },
   headerTextContainer: {
     flex: 1,
   },
@@ -701,7 +699,7 @@ const styles = StyleSheet.create({
   },
   headerStatus: {
     fontSize: 13,
-    color: COLORS.success,
+    fontWeight: '500',
   },
   chatContainer: {
     flex: 1,

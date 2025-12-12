@@ -15,11 +15,12 @@ const DEFAULT_SETTINGS: UserSettings = {
   replies_to_posts: true,
   new_messages: true,
   post_interactions: true,
+  active_status: true, // Default to true
 };
 
 export default function SettingsScreen() {
   const navigation = useNavigation<SettingsScreenNavigationProp>();
-  const { logout, session } = useAuth();
+  const { logout, session, refreshProfile } = useAuth(); // Import refreshProfile
 
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
@@ -67,6 +68,10 @@ export default function SettingsScreen() {
         .eq('id', session.user.id);
 
       if (error) throw error;
+      
+      // Refresh global profile so AuthContext knows about the change immediately
+      await refreshProfile(); 
+
     } catch (error) {
       Alert.alert('Error', 'Failed to save setting');
       // Revert on error
@@ -160,6 +165,27 @@ export default function SettingsScreen() {
               </View>
               <Text style={styles.chevron}>›</Text>
             </TouchableOpacity>
+          </View>
+
+          {/* Privacy Section (New) */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>PRIVACY</Text>
+            
+            <View style={styles.settingItem}>
+              <View style={styles.iconContainer}>
+                <Text style={styles.icon}>🟢</Text>
+              </View>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>Active Status</Text>
+                <Text style={styles.settingDescription}>Show when you're active</Text>
+              </View>
+              <Switch
+                value={settings.active_status !== false} // Default true if undefined
+                onValueChange={(val) => toggleSetting('active_status', val)}
+                trackColor={{ false: COLORS.border, true: COLORS.success }}
+                thumbColor={COLORS.backgroundLight}
+              />
+            </View>
           </View>
 
           {/* Notifications Section */}
