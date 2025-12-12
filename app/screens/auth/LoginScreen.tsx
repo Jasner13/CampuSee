@@ -193,7 +193,7 @@ export default function LoginScreen() {
                                     </Svg>
                                     <TextInput
                                         style={styles.textInput}
-                                        placeholder="lastname.firstname@cit.edu"
+                                        placeholder="firstname.lastname@cit.edu"
                                         placeholderTextColor="#64748B"
                                         value={email}
                                         onChangeText={setEmail}

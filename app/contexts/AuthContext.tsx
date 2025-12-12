@@ -5,13 +5,14 @@ import { Profile } from '../types';
 
 interface AuthContextType {
   session: Session | null;
-  // Allow undefined to signify "loading"
-  profile: Profile | null | undefined; 
+  profile: Profile | null | undefined;
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<{ error: any }>;
   signup: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
   verifyOtp: (email: string, token: string) => Promise<{ error: any }>;
+  // Add resendOtp to interface
+  resendOtp: (email: string) => Promise<{ error: any }>;
   logout: () => void;
   refreshProfile: () => Promise<void>;
 }
@@ -20,7 +21,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
-  // Initialize as undefined
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -72,8 +72,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (_event === 'SIGNED_OUT') {
         setProfile(null);
       } else if (newSession) {
-        // If the session changed (e.g. login), we fetch the profile.
-        // The profile state will transition from undefined (or old) -> new data
         await fetchProfile(newSession);
       }
       
@@ -113,6 +111,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { error };
   };
 
+  // Implement resendOtp
+  const resendOtp = async (email: string) => {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+    });
+    return { error };
+  };
+
   const logout = async () => {
     await supabase.auth.signOut();
     setSession(null);
@@ -133,6 +140,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         login,
         signup,
         verifyOtp,
+        resendOtp,
         logout,
         refreshProfile,
       }}

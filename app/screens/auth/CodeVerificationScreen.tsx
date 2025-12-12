@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,33 +6,27 @@ import {
   TextInput,
   TouchableOpacity,
   StatusBar,
-  Dimensions, // Added for dynamic sizing
+  Dimensions,
   StyleProp,
   ViewStyle,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
-import { Svg, Path } from 'react-native-svg'; // Only Svg and Path are needed
+import { Svg, Path } from 'react-native-svg';
 
-// --- Dynamic Layout Setup ---
 const { height, width } = Dimensions.get('window');
 const DESIGN_HEIGHT = 896;
 const DESIGN_WIDTH = 414;
 
-// Helper function for scaling vertical values
 const scaleY = (value: number) => (height / DESIGN_HEIGHT) * value;
-// Helper function for scaling horizontal values
 const scaleX = (value: number) => (width / DESIGN_WIDTH) * value;
 
 type CodeVerificationScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'CodeVerification'>;
 type CodeVerificationScreenRouteProp = RouteProp<AuthStackParamList, 'CodeVerification'>;
-
-// ===========================================
-// PrimaryButton Component Definition (Simulating an external import)
-// ===========================================
 
 interface PrimaryButtonProps {
   onPress: () => void;
@@ -41,7 +35,6 @@ interface PrimaryButtonProps {
   children: React.ReactNode;
 }
 
-// Hardcoded the gradient colors exactly as provided in the previous component
 const DEFAULT_GRADIENT_COLORS = ['#4F46E5', '#6366F1', '#8B5CF6'] as const;
 
 function PrimaryButton({
@@ -88,7 +81,6 @@ const primaryButtonStyles = StyleSheet.create({
   disabled: {
     opacity: 0.5,
   },
-  // Style for the button's text content
   buttonText: {
     color: '#FFFFFF',
     textAlign: 'center',
@@ -97,23 +89,33 @@ const primaryButtonStyles = StyleSheet.create({
   },
 });
 
-// ===========================================
-// CodeVerificationScreen
-// ===========================================
-
 export default function CodeVerificationScreen() {
   const navigation = useNavigation<CodeVerificationScreenNavigationProp>();
   const route = useRoute<CodeVerificationScreenRouteProp>();
 
-  const { verifyOtp } = useAuth();
+  // Get resendOtp from context
+  const { verifyOtp, resendOtp } = useAuth();
 
   const [code, setCode] = useState(['', '', '', '', '', '']);
-  // Added state for showing UI error messages (replaces alert())
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Timer state
+  const [timeLeft, setTimeLeft] = useState(60);
+  const [canResend, setCanResend] = useState(false);
+
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
-  // LOGIC: Existing change handler
+  // UPDATE: Countdown Logic
+  useEffect(() => {
+    if (timeLeft > 0) {
+      const timerId = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+      return () => clearTimeout(timerId);
+    } else {
+      setCanResend(true);
+    }
+  }, [timeLeft]);
+
   const handleCodeChange = (text: string, index: number) => {
     const newCode = [...code];
     newCode[index] = text;
@@ -124,14 +126,12 @@ export default function CodeVerificationScreen() {
     }
   };
 
-  // LOGIC: Existing key press handler
   const handleKeyPress = (e: any, index: number) => {
     if (e.nativeEvent.key === 'Backspace' && !code[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
   };
 
-  // LOGIC: Updated to use setMessage instead of alert()
   const handleVerifyAccount = async () => {
     setMessage('');
     const fullCode = code.join('');
@@ -142,33 +142,41 @@ export default function CodeVerificationScreen() {
       setLoading(false);
 
       if (error) {
-        // Replaced alert with UI state update
         setMessage(error.message);
       } else {
-        // AuthContext will automatically switch the navigator to Home
         console.log('Verification successful');
       }
     } else {
-      // Replaced alert with UI state update
       setMessage('Please enter the full 6-digit code');
     }
   };
 
-  // LOGIC: Existing resend handler
-  const handleResend = () => {
-    console.log('Resend code to:', route.params.email);
-    // Optional: Add resend logic here using supabase.auth.resend({ email })
+  // UPDATE: Resend Logic
+  const handleResend = async () => {
+    if (!canResend) return;
+
+    // Reset timer immediately to prevent spam
+    setCanResend(false);
+    setTimeLeft(30);
+    setMessage('');
+
+    const { error } = await resendOtp(route.params.email);
+
+    if (error) {
+      Alert.alert('Error', error.message);
+      // Optional: don't reset timer on error? 
+      // For security, usually better to keep the cooldown anyway.
+    } else {
+      Alert.alert('Sent!', 'A new code has been sent to your email.');
+    }
   };
 
-  // LOGIC: Existing back handler
   const handleBack = () => {
     navigation.goBack();
   };
 
-  // --- UI START ---
   return (
     <View style={styles.container}>
-      {/* Set status bar to translucent and light content for best look */}
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <LinearGradient
         colors={['#667EEA', '#FFFFFF']}
@@ -176,7 +184,6 @@ export default function CodeVerificationScreen() {
         end={{ x: 0.5, y: 1 }}
         style={styles.background}
       >
-        {/* Back Button (Moved up slightly because status bar is translucent) */}
         <TouchableOpacity
           style={[styles.backButton, { top: scaleY(64), left: scaleX(32) }]}
           onPress={handleBack}
@@ -189,7 +196,6 @@ export default function CodeVerificationScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* Main Content Wrapper - Enables Dynamic Centralization */}
         <View style={styles.contentWrapper}>
 
           <View style={styles.headerContainer}>
@@ -209,7 +215,6 @@ export default function CodeVerificationScreen() {
                   style={[
                     styles.otpBox,
                     code[index] ? styles.otpBoxFilled : styles.otpBoxEmpty,
-                    // Active state check for current focused/empty box
                     inputRefs.current[index]?.isFocused() && styles.otpBoxActive,
                   ]}
                 >
@@ -235,7 +240,6 @@ export default function CodeVerificationScreen() {
             }]}>{message}</Text>
           ) : null}
 
-          {/* Using the PrimaryButton component */}
           <View style={[styles.buttonContainer, { marginTop: message ? scaleY(24) : scaleY(32) }]}>
             <PrimaryButton
               onPress={handleVerifyAccount}
@@ -251,14 +255,24 @@ export default function CodeVerificationScreen() {
           <View style={[styles.supplementalContainer, { marginTop: scaleY(20) }]}>
             <View style={styles.supplementalContent}>
               <Text style={styles.supplementalText}>Didn't receive a code?</Text>
-              <TouchableOpacity onPress={handleResend} activeOpacity={0.7}>
-                <Text style={styles.resendText}>Resend</Text>
+              
+              {/* Resend Button with Timer */}
+              <TouchableOpacity 
+                onPress={handleResend} 
+                activeOpacity={0.7}
+                disabled={!canResend}
+              >
+                <Text style={[
+                  styles.resendText,
+                  !canResend && styles.resendTextDisabled // Style changes when disabled
+                ]}>
+                  {canResend ? 'Resend' : `Resend in ${timeLeft}s`}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
 
         </View>
-        {/* The bottom nav bar (styles.navBar) has been removed */}
       </LinearGradient>
     </View>
   );
@@ -271,23 +285,16 @@ const styles = StyleSheet.create({
   background: {
     flex: 1,
   },
-
-  // New wrapper to dynamically center content
   contentWrapper: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
-    // Adding top padding to avoid content clash with back button
     paddingTop: scaleY(120),
     paddingBottom: scaleY(50),
   },
-
-  // Removed statusBar styles
-
   backButton: {
     position: 'absolute',
-    // Apply scaled positioning
     width: scaleX(44),
     height: scaleY(44),
     zIndex: 10,
@@ -307,7 +314,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     height: scaleY(56),
-    // Removed fixed marginTop: 108 for dynamic centering
   },
   headerText: {
     color: '#FFFFFF',
@@ -325,7 +331,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     height: scaleY(47),
-    // Added gap for vertical spacing in subheader
     gap: scaleY(4),
   },
   subheaderText: {
@@ -383,20 +388,17 @@ const styles = StyleSheet.create({
     color: '#1E293B',
     padding: 0,
   },
-
   messageText: {
     color: '#FF4136',
     textAlign: 'center',
     fontSize: scaleY(16),
     fontWeight: '700',
   },
-
   buttonContainer: {
     width: '100%',
     paddingHorizontal: scaleX(59),
     height: scaleY(64),
   },
-
   supplementalContainer: {
     width: '100%',
     paddingHorizontal: scaleX(95),
@@ -422,5 +424,8 @@ const styles = StyleSheet.create({
     fontSize: scaleY(15),
     fontWeight: '800',
     color: '#667EEA',
+  },
+  resendTextDisabled: {
+    color: '#94A3B8',
   },
 });

@@ -90,7 +90,7 @@ export default function SignUpScreen() {
     }
 
     if (!validateEmail(email)) {
-      setMessage('Please use a valid CIT email (lastname.firstname@cit.edu) or a Gmail account.');
+      setMessage('Please use a valid CIT email (firstname.lastname@cit.edu) or a Gmail account.');
       return;
     }
 
@@ -146,7 +146,7 @@ export default function SignUpScreen() {
                 </Svg>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="lastname.firstname@cit.edu"
+                  placeholder="firstname.lastname@cit.edu"
                   placeholderTextColor="#64748B"
                   value={email}
                   onChangeText={setEmail}
