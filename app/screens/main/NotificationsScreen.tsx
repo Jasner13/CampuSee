@@ -19,8 +19,8 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Notification } from '../../types'; // Only import Notification from here
-import { Post } from '../../components/cards/PostCard'; // Import Post from the component to match UI shape
+import { Notification } from '../../types';
+import { Post } from '../../components/cards/PostCard';
 import { Avatar } from '../../components/Avatar';
 import { UserProfileModal } from '../../components/modals/UserProfileModal';
 
@@ -43,17 +43,18 @@ export default function NotificationsScreen() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   // --- Helper: Get Initials ---
-  const getInitials = (name: string | null) => {
+  const getInitials = (name: string | null | undefined) => {
     if (!name) return '??';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
   // --- Helper: UI Configuration ---
+  // Updated actions to be cleaner sentences
   const getNotificationConfig = (type: string) => {
     switch (type) {
-      case 'like': return { icon: '❤️', bg: '#FFE0F0', action: 'liked your post' };
-      case 'comment': return { icon: '💬', bg: '#D1FAE5', action: 'commented on' };
-      case 'follow': return { icon: null, bg: 'transparent', action: 'started following you' }; // Icon handled by Avatar
+      case 'like': return { icon: '❤️', bg: '#FFE0F0', action: 'liked your post.' };
+      case 'comment': return { icon: '💬', bg: '#D1FAE5', action: 'commented:' };
+      case 'follow': return { icon: null, bg: 'transparent', action: 'started following you.' };
       case 'event': return { icon: '📅', bg: '#E9D5FF', action: 'posted a new event:' };
       case 'announcement': return { icon: '📢', bg: '#FEF3C7', action: 'Announcement:' };
       default: return { icon: '🔔', bg: '#F3F4F6', action: 'notification' };
@@ -124,10 +125,11 @@ export default function NotificationsScreen() {
 
   // --- Interaction Logic ---
 
-  const handleNavigateToPost = async (postId: string) => {
+  const handleNavigateToPost = async (resourceId: string) => {
     setNavigating(true);
     try {
-        const { data, error } = await supabase
+        // 1. First, attempt to find a Post with this ID (Standard case)
+        let { data: postData } = await supabase
             .from('posts')
             .select(`
                 *,
@@ -135,51 +137,72 @@ export default function NotificationsScreen() {
                 post_likes(count),
                 comments(count)
             `)
-            .eq('id', postId)
+            .eq('id', resourceId)
             .single();
 
-        if (error || !data) {
-            Alert.alert("Error", "This post is no longer available.");
+        // 2. Fallback: If not found, check if it's a Comment ID
+        if (!postData) {
+             const { data: commentData } = await supabase
+                .from('comments')
+                .select('post_id')
+                .eq('id', resourceId)
+                .single();
+             
+             if (commentData?.post_id) {
+                 const { data: retryPostData } = await supabase
+                    .from('posts')
+                    .select(`
+                        *,
+                        profiles:profiles!posts_user_id_fkey (full_name, avatar_url),
+                        post_likes(count),
+                        comments(count)
+                    `)
+                    .eq('id', commentData.post_id)
+                    .single();
+                 
+                 postData = retryPostData;
+             }
+        }
+
+        if (!postData) {
+            Alert.alert("Content Unavailable", "This post may have been deleted.");
             return;
         }
 
         const formattedPost: Post = {
-            id: data.id,
-            userId: data.user_id,
-            authorName: data.profiles?.full_name || 'Unknown User',
-            authorInitials: getInitials(data.profiles?.full_name),
-            authorAvatarUrl: data.profiles?.avatar_url,
-            timestamp: new Date(data.created_at).toLocaleDateString(),
-            label: data.category,
-            title: data.title,
-            description: data.description,
-            category: data.category,
-            fileUrl: data.file_url,
-            fileType: data.file_type,
-            fileName: data.file_name,
-            likesCount: data.post_likes?.[0]?.count || 0,
-            commentsCount: data.comments?.[0]?.count || 0,
+            id: postData.id,
+            userId: postData.user_id,
+            authorName: postData.profiles?.full_name || 'Unknown User',
+            authorInitials: getInitials(postData.profiles?.full_name),
+            authorAvatarUrl: postData.profiles?.avatar_url,
+            timestamp: new Date(postData.created_at).toLocaleDateString(),
+            label: postData.category ? postData.category.charAt(0).toUpperCase() + postData.category.slice(1) : 'General',
+            title: postData.title,
+            description: postData.description,
+            category: postData.category,
+            fileUrl: postData.file_url,
+            fileType: postData.file_type,
+            fileName: postData.file_name,
+            likesCount: postData.post_likes?.[0]?.count || 0,
+            commentsCount: postData.comments?.[0]?.count || 0,
         };
 
         navigation.navigate('PostDetails', { post: formattedPost });
 
     } catch (err) {
-        console.error(err);
-        Alert.alert("Error", "Could not load post.");
+        console.error("Navigation error:", err);
+        Alert.alert("Error", "Could not load content.");
     } finally {
         setNavigating(false);
     }
   };
 
   const handleNotificationPress = async (notification: Notification) => {
-    // 1. Mark as read immediately in UI
     if (!notification.is_read) {
       setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
-      // Fire and forget update
       supabase.from('notifications').update({ is_read: true }).eq('id', notification.id).then();
     }
 
-    // 2. Handle Navigation based on Type
     if (notification.type === 'follow') {
         if (notification.actor_id) {
             setSelectedUserId(notification.actor_id);
@@ -189,7 +212,7 @@ export default function NotificationsScreen() {
         if (notification.resource_id) {
             await handleNavigateToPost(notification.resource_id);
         } else {
-            Alert.alert("Notice", "Content not available.");
+            Alert.alert("Notice", "Content link is missing.");
         }
     }
   };
@@ -237,6 +260,27 @@ export default function NotificationsScreen() {
             const actorName = notification.actor?.full_name || 'System';
             const initials = getInitials(actorName);
 
+            // --- CLEANUP LOGIC FOR TEXT ---
+            let displayContent = notification.content || '';
+
+            // 1. Remove redundant "Commented:" prefix and add quotes
+            if (notification.type === 'comment') {
+                displayContent = displayContent.replace(/^Commented:\s*/i, '');
+                displayContent = `"${displayContent}"`;
+            } 
+            // 2. Remove redundant "posted a new event:" prefix
+            else if (notification.type === 'event') {
+                displayContent = displayContent.replace(/^posted a new event:\s*/i, '');
+                displayContent = `"${displayContent}"`;
+            }
+            // 3. For Likes/Follows, ignore content if it just repeats the action
+            else if (notification.type === 'like' || notification.type === 'follow') {
+                if (displayContent.toLowerCase().includes('liked your post') || 
+                    displayContent.toLowerCase().includes('started following')) {
+                    displayContent = '';
+                }
+            }
+
             return (
               <TouchableOpacity
                 key={notification.id}
@@ -244,7 +288,6 @@ export default function NotificationsScreen() {
                 activeOpacity={0.7}
                 onPress={() => handleNotificationPress(notification)}
               >
-                {/* Logic: If 'follow', show Avatar. Else show Icon circle */}
                 <View style={styles.leftContainer}>
                     {notification.type === 'follow' ? (
                         <View style={styles.avatarWrapper}>
@@ -253,7 +296,6 @@ export default function NotificationsScreen() {
                                 avatarUrl={notification.actor?.avatar_url} 
                                 size="small" 
                             />
-                            {/* Tiny overlay icon to indicate it's a follow (optional polish) */}
                             <View style={styles.followBadge}>
                                 <Text style={{fontSize: 8}}>👤</Text>
                             </View>
@@ -269,9 +311,9 @@ export default function NotificationsScreen() {
                   <Text style={styles.notificationText}>
                     <Text style={styles.userName}>{actorName}</Text>
                     <Text style={styles.action}> {config.action}</Text>
-                    {notification.content && (
-                      <Text style={styles.postTitle}> {notification.content}</Text>
-                    )}
+                    {displayContent ? (
+                      <Text style={styles.postTitle}> {displayContent}</Text>
+                    ) : null}
                   </Text>
                   <Text style={styles.timestamp}>{getTimeAgo(notification.created_at)}</Text>
                 </View>
@@ -363,7 +405,7 @@ const styles = StyleSheet.create({
   },
   avatarWrapper: {
       position: 'relative',
-      padding: 4, // Align visual size with icon container
+      padding: 4,
   },
   followBadge: {
       position: 'absolute',
@@ -385,12 +427,13 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 12,
     justifyContent: 'center',
-    minHeight: 48, // Match icon height for alignment
+    minHeight: 48,
   },
   notificationText: {
     fontSize: 15,
-    lineHeight: 20,
+    lineHeight: 22,
     marginBottom: 4,
+    flexWrap: 'wrap', 
   },
   userName: {
     fontWeight: '700',
@@ -401,8 +444,9 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   postTitle: {
-    fontWeight: '700',
+    fontWeight: '500', 
     color: COLORS.textPrimary,
+    fontStyle: 'italic', 
   },
   timestamp: {
     fontSize: 13,
