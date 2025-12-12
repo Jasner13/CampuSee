@@ -9,7 +9,9 @@ import {
   RefreshControl, 
   ActivityIndicator, 
   DeviceEventEmitter,
-  Image 
+  Image,
+  FlatList, // <--- Added
+  ListRenderItem // <--- Added
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect, CompositeNavigationProp } from '@react-navigation/native';
@@ -22,7 +24,7 @@ import { PostCard, Post } from '../../components/cards/PostCard';
 import { BottomNav } from '../../components/BottomNav';
 import { UserProfileModal } from '../../components/modals/UserProfileModal';
 import { SharePostModal } from '../../components/modals/SharePostModal';
-import { PostLikesModal } from '../../components/modals/PostLikesModal'; // <--- IMPORTED
+import { PostLikesModal } from '../../components/modals/PostLikesModal';
 import { GRADIENTS, COLORS } from '../../constants/colors';
 import { FONTS } from '../../constants/fonts';
 import { CATEGORIES, CategoryType } from '../../constants/categories';
@@ -33,6 +35,8 @@ type HomeFeedScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Home'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
+
+const PAGE_SIZE = 10; // <--- Pagination Size
 
 const getRelativeTime = (dateString: string) => {
   const date = new Date(dateString);
@@ -63,6 +67,11 @@ export const HomeFeedScreen: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false); // <--- New State
+  
+  // Pagination State
+  const [page, setPage] = useState(0); // <--- New State
+  const [hasMore, setHasMore] = useState(true); // <--- New State
 
   // Modal States
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -75,8 +84,15 @@ export const HomeFeedScreen: React.FC = () => {
   const [likesModalVisible, setLikesModalVisible] = useState(false);
   const [selectedPostIdForLikes, setSelectedPostIdForLikes] = useState<string | null>(null);
 
-  const fetchPosts = async () => {
+  const fetchPosts = async (pageNumber = 0, shouldRefresh = false) => {
+    // Only show full screen loader on initial load (page 0) and not refreshing
+    if (pageNumber === 0 && !shouldRefresh) setLoading(true);
+    if (pageNumber > 0) setLoadingMore(true);
+
     try {
+      const from = pageNumber * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
       // Includes counts for likes and comments
       let query = supabase
         .from('posts')
@@ -86,7 +102,8 @@ export const HomeFeedScreen: React.FC = () => {
           post_likes(count),
           comments(count)
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(from, to); // <--- Implement Pagination
 
       if (selectedCategory !== 'all') {
         query = query.eq('category', selectedCategory);
@@ -121,49 +138,63 @@ export const HomeFeedScreen: React.FC = () => {
           likesCount: item.post_likes?.[0]?.count || 0,
           commentsCount: item.comments?.[0]?.count || 0,
         }));
-        setPosts(formattedPosts);
+
+        if (pageNumber === 0) {
+          setPosts(formattedPosts);
+        } else {
+          setPosts(prev => [...prev, ...formattedPosts]);
+        }
+        
+        // If we got fewer items than requested, we've reached the end
+        setHasMore(data.length === PAGE_SIZE);
       }
     } catch (err) {
       console.error('Unexpected error:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
   };
 
+  // Reset pagination when filters change
   useEffect(() => {
-    fetchPosts();
+    setPage(0);
+    setHasMore(true);
+    fetchPosts(0);
 
     const subscription = DeviceEventEmitter.addListener('post_updated', () => {
-        setLoading(true);
-        fetchPosts();
+        setPage(0);
+        fetchPosts(0, true);
     });
 
     return () => {
         subscription.remove();
     };
-  }, []); 
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setLoading(true);
-      fetchPosts();
-    }, 500);
-    return () => clearTimeout(timeoutId);
-  }, [selectedCategory, searchText]);
+  }, [selectedCategory, searchText]); 
 
   useFocusEffect(
     useCallback(() => {
-      fetchPosts();
       refreshProfile(); 
-    }, [selectedCategory, searchText]) 
+      // Note: We do NOT auto-fetch posts on focus to preserve scroll position 
+    }, []) 
   );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchPosts();
+    setPage(0);
+    setHasMore(true);
+    fetchPosts(0, true);
     refreshProfile();
-  }, []);
+  }, [selectedCategory, searchText]);
+
+  const handleLoadMore = () => {
+    if (!loading && !loadingMore && hasMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchPosts(nextPage);
+    }
+  };
 
   const handleNavigate = (item: 'home' | 'messages' | 'notifications' | 'profile') => {
     const routeMap = { home: 'Home', messages: 'Messages', notifications: 'Notifications', profile: 'Profile' } as const;
@@ -188,11 +219,38 @@ export const HomeFeedScreen: React.FC = () => {
       setShareModalVisible(true);
   };
 
-  // NEW HANDLER FOR LIKES
   const handleLikesPress = (post: Post) => {
     setSelectedPostIdForLikes(post.id);
     setLikesModalVisible(true);
   };
+
+  // Render Item for FlatList
+  const renderPostItem: ListRenderItem<Post> = ({ item }) => (
+    <PostCard 
+        post={item} 
+        onPress={() => handlePostPress(item)}
+        onProfilePress={handleUserPress}
+        onSharePress={handleSharePress}
+        onLikesPress={handleLikesPress}
+    />
+  );
+
+  // Footer for loading more
+  const renderFooter = () => {
+    if (!loadingMore) return <View style={{ height: 50 }} />; // Padding from your file
+    return (
+      <View style={{ paddingVertical: 20, paddingBottom: 50 }}>
+        <ActivityIndicator size="small" color={COLORS.primary} />
+      </View>
+    );
+  };
+
+  const renderEmptyComponent = () => (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyStateText}>No posts found.</Text>
+      <Text style={styles.emptyStateSubText}>Be the first to post!</Text>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -259,38 +317,33 @@ export const HomeFeedScreen: React.FC = () => {
         <View style={styles.categoryDividerBottom} />
       </View>
 
-      <ScrollView 
-        style={styles.feedContainer} 
-        contentContainerStyle={styles.feedContent} 
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
-            onRefresh={onRefresh} 
-            tintColor={COLORS.primary} 
-          />
-        }
-      >
+      <View style={styles.feedContainer}>
         {loading && !refreshing ? (
           <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 20 }} />
-        ) : posts.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No posts found.</Text>
-            <Text style={styles.emptyStateSubText}>Be the first to post!</Text>
-          </View>
         ) : (
-          posts.map((post) => (
-            <PostCard 
-                key={post.id} 
-                post={post} 
-                onPress={() => handlePostPress(post)}
-                onProfilePress={handleUserPress}
-                onSharePress={handleSharePress}
-                onLikesPress={handleLikesPress} // <--- PASSING THE PROP
-            />
-          ))
+          <FlatList
+            data={posts}
+            renderItem={renderPostItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.feedContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl 
+                refreshing={refreshing} 
+                onRefresh={onRefresh} 
+                tintColor={COLORS.primary} 
+              />
+            }
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={renderFooter}
+            ListEmptyComponent={renderEmptyComponent}
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+          />
         )}
-      </ScrollView>
+      </View>
 
       {/* Modals */}
       {selectedUserId && (
@@ -404,7 +457,7 @@ const styles = StyleSheet.create({
   feedContent: {
     padding: 18,
     gap: 8,
-    paddingBottom: 50,
+    // paddingBottom handled in ListFooterComponent logic
   },
   emptyState: {
     alignItems: 'center',
