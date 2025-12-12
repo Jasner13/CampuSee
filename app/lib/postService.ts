@@ -1,6 +1,6 @@
 // app/lib/postService.ts
 import { supabase } from './supabase';
-import * as FileSystem from 'expo-file-system'; 
+import * as FileSystem from 'expo-file-system/legacy'; 
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 
@@ -23,6 +23,7 @@ export const PostService = {
     const targetUrl = `${SUPABASE_URL}/storage/v1/object/post_attachments/${fileName}`;
 
     // Use FileSystem.uploadAsync with the manual constant
+    // NOTE: Using legacy FileSystem for uploadAsync support
     const response = await FileSystem.uploadAsync(targetUrl, uri, {
         httpMethod: 'POST',
         uploadType: UPLOAD_TYPE_BINARY as any, 

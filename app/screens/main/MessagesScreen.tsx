@@ -1,5 +1,4 @@
 // app/screens/main/MessagesScreen.tsx
-// ... imports ...
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, ActivityIndicator, TextInput, Keyboard } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
@@ -14,7 +13,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Avatar } from '../../components/Avatar';
 import { ConversationView, Profile } from '../../types';
 
-// ... type definitions ...
 type MessagesScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Messages'>,
   NativeStackNavigationProp<RootStackParamList>
@@ -22,9 +20,8 @@ type MessagesScreenNavigationProp = CompositeNavigationProp<
 
 export default function MessagesScreen() {
   const navigation = useNavigation<MessagesScreenNavigationProp>();
-  const { session, onlineUsers } = useAuth(); // <--- Get onlineUsers
+  const { session, onlineUsers } = useAuth();
 
-  // ... state ...
   const [conversations, setConversations] = useState<ConversationView[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
@@ -32,7 +29,6 @@ export default function MessagesScreen() {
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [isSearchingLoading, setIsSearchingLoading] = useState(false);
 
-  // ... handleNavigate, handleBack, toggleSearch functions ...
   const handleBack = () => {
     if (isSearching) {
       setIsSearching(false);
@@ -127,14 +123,28 @@ export default function MessagesScreen() {
     return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   };
 
+  // --- UPDATED PREVIEW FUNCTION ---
   const getMessagePreview = (content: string, senderId: string) => {
     try {
         if (content && content.trim().startsWith('{')) {
             const parsed = JSON.parse(content);
+            const isMe = senderId === session?.user?.id;
+
             if (parsed.type === 'share_post') {
-                const isMe = senderId === session?.user?.id;
                 const postTitle = parsed.title || 'a post';
                 return isMe ? `You shared a post: "${postTitle}"` : `Shared a post: "${postTitle}"`;
+            }
+
+            if (parsed.type === 'image') {
+                return isMe ? 'You sent a photo' : 'Sent a photo';
+            }
+
+            if (parsed.type === 'video') {
+                return isMe ? 'You sent a video' : 'Sent a video';
+            }
+
+            if (parsed.type === 'file') {
+                return isMe ? `You sent a file` : `Sent a file`;
             }
         }
     } catch (e) {}
@@ -190,7 +200,7 @@ export default function MessagesScreen() {
                       initials={getInitials(item.full_name)}
                       avatarUrl={item.avatar_url}
                       size="small"
-                      isOnline={onlineUsers.has(item.id)} // <--- Pass Online Status
+                      isOnline={onlineUsers.has(item.id)}
                     />
                   </View>
                   <View>
@@ -222,7 +232,7 @@ export default function MessagesScreen() {
               const name = item.peer_name || 'Unknown';
               const initials = getInitials(name);
               const isUnread = item.receiver_id === session?.user.id && !item.is_read;
-              const isUserOnline = onlineUsers.has(item.peer_id); // <--- Check online status
+              const isUserOnline = onlineUsers.has(item.peer_id);
 
               return (
                 <MessageCard
@@ -231,7 +241,7 @@ export default function MessagesScreen() {
                   time={formatTime(item.time)}
                   initials={initials}
                   avatarUrl={item.peer_avatar}
-                  isOnline={isUserOnline} // <--- Pass it down
+                  isOnline={isUserOnline}
                   isUnread={isUnread}
                   onPress={() => openChat(item.peer_id, item.peer_name, item.peer_avatar)}
                 />
