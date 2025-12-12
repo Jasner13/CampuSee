@@ -487,6 +487,6 @@ const styles = StyleSheet.create({
   removeButton: {
     padding: 8,
   },
-  footer: { marginTop: 20, marginBottom: 50 },
+  footer: { marginTop: 20, marginBottom: 80 },
   buttonText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
 });

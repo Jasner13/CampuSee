@@ -1,5 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { 
+  View, 
+  Text, 
+  ScrollView, 
+  StyleSheet, 
+  StatusBar, 
+  TouchableOpacity, 
+  TextInput, 
+  ActivityIndicator, 
+  KeyboardAvoidingView, 
+  Platform, 
+  Alert, 
+  Keyboard // <--- Added Keyboard import
+} from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/types';
@@ -25,11 +38,31 @@ export default function MessagesScreenChat() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
 
+  // --- Keyboard State for Android Fix (From PostDetailScreen) ---
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+
   const scrollViewRef = useRef<ScrollView>(null);
 
   const handleBack = () => {
     navigation.goBack();
   };
+
+  // --- Keyboard Listener for Android Fix ---
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+        setKeyboardVisible(true);
+      });
+      const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+        setKeyboardVisible(false);
+      });
+
+      return () => {
+        keyboardDidShowListener.remove();
+        keyboardDidHideListener.remove();
+      };
+    }
+  }, []);
 
   const fetchMessages = async () => {
     if (!session?.user) return;
@@ -142,8 +175,6 @@ export default function MessagesScreenChat() {
     }
 
     try {
-        // Fetch the full post details to navigate to PostDetailScreen
-        // FIXED: Added '!posts_user_id_fkey' to resolve ambiguous relationship error
         const { data: postData, error } = await supabase
             .from('posts')
             .select(`
@@ -159,7 +190,6 @@ export default function MessagesScreenChat() {
             return;
         }
 
-        // Format data for the screen params
         const formattedPost = {
             id: postData.id,
             userId: postData.user_id,
@@ -176,7 +206,6 @@ export default function MessagesScreenChat() {
             fileUrl: postData.file_url,
         };
 
-        // Navigate
         // @ts-ignore
         navigation.navigate('PostDetails', { post: formattedPost });
 
@@ -192,7 +221,6 @@ export default function MessagesScreenChat() {
 
   const renderMessageContent = (content: string, isSentByMe: boolean) => {
       try {
-          // Attempt to parse JSON content for shared posts
           if (content && content.trim().startsWith('{')) {
               const parsed = JSON.parse(content);
               if (parsed.type === 'share_post') {
@@ -220,10 +248,9 @@ export default function MessagesScreenChat() {
               }
           }
       } catch (e) {
-          // Not JSON, fall through to regular text
+          // Not JSON
       }
 
-      // Regular text message
       return (
         <Text style={[
             styles.messageText,
@@ -235,13 +262,10 @@ export default function MessagesScreenChat() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-    >
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundLight} />
 
+      {/* Moved Header OUTSIDE KeyboardAvoidingView to stop it from pushing up */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
           <Svg width={32} height={32} viewBox="0 0 32 32" fill="none">
@@ -265,69 +289,75 @@ export default function MessagesScreenChat() {
         </View>
       </View>
 
-      {loading ? (
-        <View style={[styles.chatContainer, { justifyContent: 'center' }]}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-        </View>
-      ) : (
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.chatContainer}
-          contentContainerStyle={styles.chatContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {messages.map((message, index) => {
-            const isSentByMe = message.sender_id === session?.user?.id;
-
-            const showTimestamp = index === 0 ||
-              new Date(messages[index - 1].created_at).getMinutes() !== new Date(message.created_at).getMinutes() ||
-              messages[index - 1].sender_id !== message.sender_id;
-
-            return (
-              <View key={message.id}>
-                <View style={[
-                  styles.messageBubble,
-                  isSentByMe ? styles.messageBubbleSent : styles.messageBubbleReceived
-                ]}>
-                  {renderMessageContent(message.content, isSentByMe)}
-                </View>
-                {showTimestamp && (
-                  <Text style={[
-                    styles.messageTimestamp,
-                    isSentByMe ? styles.messageTimestampSent : styles.messageTimestampReceived
-                  ]}>
-                    {formatTime(message.created_at)}
-                  </Text>
-                )}
-              </View>
-            );
-          })}
-        </ScrollView>
-      )}
-
-      <View style={styles.inputContainer}>
-        <View style={styles.inputWrapper}>
-          <TextInput
-            style={styles.input}
-            placeholder="Send a message..."
-            placeholderTextColor={COLORS.lightGray}
-            value={messageText}
-            onChangeText={setMessageText}
-            multiline
-          />
-          <TouchableOpacity
-            style={[styles.sendButton, (!messageText.trim() || sending) && { opacity: 0.5 }]}
-            onPress={handleSend}
-            activeOpacity={0.8}
-            disabled={!messageText.trim() || sending}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "padding"}
+        enabled={Platform.OS === 'ios' ? true : isKeyboardVisible} // Use Android listener logic
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : -30}   // Adjust for header/status bar
+      >
+        {loading ? (
+          <View style={[styles.chatContainer, { justifyContent: 'center' }]}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+          </View>
+        ) : (
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.chatContainer}
+            contentContainerStyle={styles.chatContent}
+            showsVerticalScrollIndicator={false}
           >
-            <Svg width={20} height={20} viewBox="0 0 20 20" fill="none">
-              <Path d="M2.5 10L17.5 2.5L10 17.5L8.125 11.25L2.5 10Z" fill="white" stroke="white" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-          </TouchableOpacity>
+            {messages.map((message, index) => {
+              const isSentByMe = message.sender_id === session?.user?.id;
+              const showTimestamp = index === 0 ||
+                new Date(messages[index - 1].created_at).getMinutes() !== new Date(message.created_at).getMinutes() ||
+                messages[index - 1].sender_id !== message.sender_id;
+
+              return (
+                <View key={message.id}>
+                  <View style={[
+                    styles.messageBubble,
+                    isSentByMe ? styles.messageBubbleSent : styles.messageBubbleReceived
+                  ]}>
+                    {renderMessageContent(message.content, isSentByMe)}
+                  </View>
+                  {showTimestamp && (
+                    <Text style={[
+                      styles.messageTimestamp,
+                      isSentByMe ? styles.messageTimestampSent : styles.messageTimestampReceived
+                    ]}>
+                      {formatTime(message.created_at)}
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        <View style={styles.inputContainer}>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              placeholder="Send a message..."
+              placeholderTextColor={COLORS.lightGray}
+              value={messageText}
+              onChangeText={setMessageText}
+              multiline
+            />
+            <TouchableOpacity
+              style={[styles.sendButton, (!messageText.trim() || sending) && { opacity: 0.5 }]}
+              onPress={handleSend}
+              activeOpacity={0.8}
+              disabled={!messageText.trim() || sending}
+            >
+              <Svg width={20} height={20} viewBox="0 0 20 20" fill="none">
+                <Path d="M2.5 10L17.5 2.5L10 17.5L8.125 11.25L2.5 10Z" fill="white" stroke="white" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -441,7 +471,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
     minHeight: 80, 
-    paddingBottom: 30, 
+    paddingBottom: 50, 
   },
   inputWrapper: {
     flexDirection: 'row',
@@ -469,7 +499,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: 8,
   },
-  // Shared Post Styles
   sharedPostContainer: {
       minWidth: 200,
   },
