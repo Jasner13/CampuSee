@@ -237,9 +237,9 @@ export const HomeFeedScreen: React.FC = () => {
 
   // Footer for loading more
   const renderFooter = () => {
-    if (!loadingMore) return <View style={{ height: 50 }} />; // Padding from your file
+    if (!loadingMore) return <View style={{ height: 20 }} />; // Padding from your file
     return (
-      <View style={{ paddingVertical: 20, paddingBottom: 50 }}>
+      <View style={{ paddingVertical: 20, paddingBottom: 20 }}>
         <ActivityIndicator size="small" color={COLORS.primary} />
       </View>
     );
