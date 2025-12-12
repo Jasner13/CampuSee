@@ -42,7 +42,7 @@ interface PostCardProps {
   onPress?: () => void;
   onProfilePress?: (userId: string) => void;
   onSharePress?: (post: Post) => void;
-  onLikesPress?: (post: Post) => void; // <--- ADDED THIS PROP
+  onLikesPress?: (post: Post) => void; 
 }
 
 export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePress, onSharePress, onLikesPress }) => {
@@ -105,7 +105,8 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
                 actor_id: currentUserId,
                 type: 'like',
                 title: 'New Like',
-                content: 'Someone liked your post.',
+                content: 'liked your post.',
+                resource_id: post.id, // Added resource_id here to link to the post
                 is_read: false
             });
       }
@@ -227,7 +228,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
 };
 
 const styles = StyleSheet.create({
-  cardContainer: { zIndex: 10 }, // REMOVED marginBottom
+  cardContainer: { zIndex: 10 }, 
   cardInner: {
     backgroundColor: COLORS.backgroundLight,
     borderRadius: 24,

@@ -1,9 +1,14 @@
+// app/lib/postService.ts
 import { supabase } from './supabase';
-import * as FileSystem from 'expo-file-system/legacy'; 
+import * as FileSystem from 'expo-file-system'; 
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 
 export type ReactionType = 'like' | 'love' | 'haha' | 'wow' | 'sad' | 'angry';
+
+// Manual constant for Binary Content upload (1 = BINARY_CONTENT)
+// This avoids the 'FileSystemUploadType' import error
+const UPLOAD_TYPE_BINARY = 1;
 
 export const PostService = {
   /**
@@ -18,9 +23,10 @@ export const PostService = {
     const fileName = `${userId}/${Date.now()}.${extension}`;
     const targetUrl = `${SUPABASE_URL}/storage/v1/object/post_attachments/${fileName}`;
 
+    // Use FileSystem.uploadAsync with the manual constant
     const response = await FileSystem.uploadAsync(targetUrl, uri, {
         httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        uploadType: UPLOAD_TYPE_BINARY as any, 
         headers: {
             Authorization: `Bearer ${session.access_token}`, 
             'Content-Type': mimeType,
@@ -71,6 +77,37 @@ export const PostService = {
       .single();
 
     if (error) throw error;
+
+    // --- EVENT NOTIFICATION LOGIC ---
+    if (category === 'events' && data) {
+        try {
+            // 1. Fetch all other users
+            const { data: allUsers } = await supabase
+                .from('profiles')
+                .select('id')
+                .neq('id', userId);
+
+            if (allUsers && allUsers.length > 0) {
+                // 2. Prepare notifications payload
+                const notifications = allUsers.map(user => ({
+                    user_id: user.id, // The recipient
+                    actor_id: userId, // The creator of the event
+                    type: 'event',
+                    title: 'New Event',
+                    content: `posted a new event: "${title}"`,
+                    resource_id: data.id, // Link to the post
+                    is_read: false
+                }));
+
+                // 3. Bulk Insert
+                await supabase.from('notifications').insert(notifications);
+            }
+        } catch (notifError) {
+            console.error('Failed to send event notifications:', notifError);
+            // Don't fail the post creation if notifications fail
+        }
+    }
+
     return data;
   },
 
@@ -116,7 +153,7 @@ export const PostService = {
         post_id: postId, 
         user_id: userId, 
         content,
-        parent_id: parentId // Added parent_id
+        parent_id: parentId 
       })
       .select('*, profiles(id, full_name, avatar_url, program)')
       .single();
@@ -129,7 +166,7 @@ export const PostService = {
   async updateComment(commentId: string, content: string) {
     const { data, error } = await supabase
       .from('comments')
-      .update({ content, is_edited: true }) // Assuming you added is_edited column
+      .update({ content, is_edited: true }) 
       .eq('id', commentId)
       .select('*, profiles(id, full_name, avatar_url, program)')
       .single();
