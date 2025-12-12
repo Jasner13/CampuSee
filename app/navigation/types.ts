@@ -17,6 +17,14 @@ export type MainTabParamList = {
     peerName: string;
     peerInitials: string;
     peerAvatarUrl?: string | null;
+    postContext?: {
+      id: string;
+      title: string;
+      description: string;
+      fileUrl?: string | null;
+      fileType?: string | null;
+      postAuthor?: string; // <--- ADDED
+    };
   };
   CreatePost: undefined;
   Notifications: undefined;
@@ -31,23 +39,26 @@ export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
   Main: NavigatorScreenParams<MainTabParamList>;
   
- 
   PostDetails: { post: Post };
   
- 
   Settings: undefined;
   EditProfile: { isNewUser?: boolean } | undefined;
   ChangePassword: undefined;
-  
-  
   SetupProfile: { isNewUser: boolean };
-  
   
   MessagesChat: {
     peerId: string;
     peerName: string;
     peerInitials: string;
     peerAvatarUrl?: string | null;
+    postContext?: {
+      id: string;
+      title: string;
+      description: string;
+      fileUrl?: string | null;
+      fileType?: string | null;
+      postAuthor?: string; // <--- ADDED
+    };
   };
 };
 

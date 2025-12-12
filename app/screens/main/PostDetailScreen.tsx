@@ -16,8 +16,7 @@ import {
   FlatList,
   RefreshControl,
   Keyboard,
-  SafeAreaView as RNSafeAreaView,
-  Dimensions
+  SafeAreaView as RNSafeAreaView
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -40,7 +39,6 @@ type PostDetailScreenNavigationProp = NativeStackNavigationProp<
 >;
 type PostDetailScreenRouteProp = RouteProp<RootStackParamList, 'PostDetails'>;
 
-// Interface for local comment structure
 interface ExtendedComment extends Comment {
   parent_id: string | null;
   replies?: ExtendedComment[];
@@ -56,17 +54,14 @@ export default function PostDetailScreen() {
   const { post: initialPost } = route.params;
   const [post, setPost] = useState(initialPost);
 
-  // Interaction State
   const [comments, setComments] = useState<ExtendedComment[]>([]);
   const [structuredComments, setStructuredComments] = useState<ExtendedComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(true);
   
-  // Input State
   const [commentText, setCommentText] = useState('');
   const [sendingComment, setSendingComment] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
-  // Reply & Edit State
   const [replyingTo, setReplyingTo] = useState<ExtendedComment | null>(null);
   const [editingComment, setEditingComment] = useState<ExtendedComment | null>(null);
   
@@ -74,22 +69,18 @@ export default function PostDetailScreen() {
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   
-  // Edit Post State
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(post.title);
   const [editDescription, setEditDescription] = useState(post.description);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Image Viewer State
   const [imageModalVisible, setImageModalVisible] = useState(false);
 
-  // File name logic
   const displayFileName = 
     (post as any).fileName || 
     (post.fileUrl ? decodeURIComponent(post.fileUrl).split('/').pop() : 'Attachment');
 
-  // Media type detection
   const isImage = 
     (post as any).fileType === 'image' || 
     (post.fileUrl && /\.(jpg|jpeg|png|gif|webp|heic)$/i.test(post.fileUrl));
@@ -100,14 +91,12 @@ export default function PostDetailScreen() {
   
   const isOwner = currentUserId === post.userId;
 
-  // --- Initial Data Fetching ---
   useEffect(() => {
     fetchComments();
     fetchInteractionStatus();
     fetchLikesCount();
   }, [post.id]);
 
-  // Structure comments whenever raw list changes
   useEffect(() => {
     structureComments(comments);
   }, [comments]);
@@ -116,12 +105,10 @@ export default function PostDetailScreen() {
     const commentMap = new Map<string, ExtendedComment>();
     const roots: ExtendedComment[] = [];
 
-    // 1. Initialize map
     flatComments.forEach(c => {
       commentMap.set(c.id, { ...c, replies: [] });
     });
 
-    // 2. Build Tree
     flatComments.forEach(c => {
       const node = commentMap.get(c.id);
       if (node) {
@@ -184,7 +171,6 @@ export default function PostDetailScreen() {
     setIsSaved(!!saveData);
   };
 
-  // --- Post Actions ---
   const handleBack = () => navigation.goBack();
 
   const handleLike = async () => {
@@ -208,7 +194,7 @@ export default function PostDetailScreen() {
             type: 'like',
             title: 'New Like',
             content: 'Someone liked your post.',
-            resource_id: post.id, // Ensure resource_id is here too
+            resource_id: post.id, 
             is_read: false
           });
         }
@@ -234,8 +220,6 @@ export default function PostDetailScreen() {
       setIsSaved(previousSaved);
     }
   };
-
-  // --- Comment Actions ---
 
   const initiateReply = (comment: ExtendedComment) => {
     setReplyingTo(comment);
@@ -284,7 +268,6 @@ export default function PostDetailScreen() {
 
     try {
       if (editingComment) {
-        // --- Update Existing Comment ---
         const { data, error } = await supabase
           .from('comments')
           .update({ content: commentText.trim() })
@@ -298,7 +281,6 @@ export default function PostDetailScreen() {
         setEditingComment(null);
 
       } else {
-        // --- Create New Comment (or Reply) ---
         const parentId = replyingTo ? replyingTo.id : null;
         
         const { data, error } = await supabase
@@ -317,7 +299,6 @@ export default function PostDetailScreen() {
         setComments(prev => [...prev, data as ExtendedComment]);
         setReplyingTo(null);
 
-        // Notifications
         if (post.userId !== currentUserId && !parentId) {
           await supabase.from('notifications').insert({
             user_id: post.userId,
@@ -325,7 +306,7 @@ export default function PostDetailScreen() {
             type: 'comment',
             title: 'New Comment',
             content: `Commented: ${commentText.trim().substring(0, 50)}...`,
-            resource_id: post.id, // <--- FIXED: Added resource_id to link notification to post
+            resource_id: post.id, 
             is_read: false
           });
         }
@@ -340,7 +321,6 @@ export default function PostDetailScreen() {
     }
   };
 
-  // --- Post Management Actions ---
   const deletePost = async () => {
     if (isDeleting) return;
     setIsDeleting(true);
@@ -398,16 +378,24 @@ export default function PostDetailScreen() {
     try { await WebBrowser.openBrowserAsync(post.fileUrl); } catch (err) { Alert.alert('Error', 'Could not open the file.'); }
   };
 
+  // --- THIS IS THE UPDATED FUNCTION ---
   const handleSendPrivateMessage = () => {
     navigation.navigate('MessagesChat', {
       peerId: post.userId,
       peerName: post.authorName,
       peerInitials: post.authorInitials,
       peerAvatarUrl: post.authorAvatarUrl,
+      postContext: {
+        id: post.id,
+        title: post.title,
+        description: post.description,
+        fileUrl: post.fileUrl,
+        fileType: post.fileType,
+        postAuthor: post.authorName // Pass the author name
+      }
     });
   };
 
-  // --- Render Functions ---
   const renderHeader = () => (
     <View style={styles.postCard}>
       <View style={styles.authorSection}>
@@ -506,15 +494,10 @@ export default function PostDetailScreen() {
       ? item.profiles.full_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()
       : '??';
     
-    // Custom logic to make reply avatars noticeably smaller
-    const avatarSize = isReply ? "custom" : "small"; 
-
     return (
       <View key={item.id} style={[styles.commentRow, isReply && styles.replyRow]}>
-        {/* Avatar Column */}
         <View style={styles.avatarContainer}>
           {isReply ? (
-            // Custom tiny avatar for replies to save space
             <View style={[styles.tinyAvatar, { backgroundColor: COLORS.primary }]}>
                <Text style={styles.tinyAvatarText}>{initials}</Text>
             </View>
@@ -523,7 +506,6 @@ export default function PostDetailScreen() {
           )}
         </View>
 
-        {/* Content Column - Flex 1 ensures it stays within screen bounds */}
         <View style={styles.commentContent}>
           <View style={[styles.commentBubble, isReply && styles.replyBubble]}>
             <View style={styles.commentHeader}>
@@ -575,7 +557,6 @@ export default function PostDetailScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" />
       
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
           <Ionicons name="chevron-back" size={28} color={COLORS.textPrimary} />
@@ -590,7 +571,6 @@ export default function PostDetailScreen() {
         ) : <View style={{ width: 40 }} />}
       </View>
 
-      {/* Keyboard Fix: behavior='height' generally works best on Android for this layout */}
       <KeyboardAvoidingView 
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
@@ -603,7 +583,7 @@ export default function PostDetailScreen() {
           ListHeaderComponent={renderHeader}
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
-          onScrollBeginDrag={() => Keyboard.dismiss()} // Hide keyboard on scroll
+          onScrollBeginDrag={() => Keyboard.dismiss()}
           refreshControl={
             <RefreshControl 
               refreshing={loadingComments} 
@@ -617,11 +597,9 @@ export default function PostDetailScreen() {
           }
         />
 
-        {/* Comment Input */}
         {!isEditing && (
           <View style={[styles.commentSection, { paddingBottom: Math.max(insets.bottom, 10) }]}>
             
-            {/* Context Banner */}
             {(replyingTo || editingComment) && (
               <View style={styles.inputContext}>
                  <Text style={styles.contextText} numberOfLines={1}>
@@ -667,7 +645,6 @@ export default function PostDetailScreen() {
         )}
       </KeyboardAvoidingView>
 
-      {/* Image Preview Modal */}
       <Modal visible={imageModalVisible} transparent={true} animationType="fade" onRequestClose={() => setImageModalVisible(false)}>
         <RNSafeAreaView style={styles.modalContainer}>
           <TouchableOpacity style={styles.closeModalButton} onPress={() => setImageModalVisible(false)}>
@@ -688,7 +665,6 @@ const styles = StyleSheet.create({
   moreButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F7F8FA', justifyContent: 'center', alignItems: 'center' },
   contentContainer: { paddingBottom: 20 },
   
-  // Post Card
   postCard: { backgroundColor: '#FFFFFF', padding: 20, marginTop: 12, marginHorizontal: 16, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3, marginBottom: 16 },
   authorSection: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   authorInfo: { flex: 1 },
@@ -697,7 +673,6 @@ const styles = StyleSheet.create({
   postTitle: { fontSize: 20, fontWeight: '700', color: '#1A1B2D', marginBottom: 12, lineHeight: 28 },
   postDescription: { fontSize: 15, color: '#525769', lineHeight: 24, marginBottom: 20 },
   
-  // Inputs
   editTitleInput: { fontSize: 20, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E0E0E0', paddingVertical: 4 },
   editDescInput: { fontSize: 15, color: COLORS.textPrimary, lineHeight: 22, marginBottom: 16, borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 12, padding: 12, minHeight: 100, textAlignVertical: 'top', backgroundColor: '#F9F9F9' },
   editButtonsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginBottom: 16 },
@@ -707,7 +682,6 @@ const styles = StyleSheet.create({
   saveButton: { backgroundColor: COLORS.primary },
   saveButtonText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
 
-  // Media
   mediaContainer: { marginBottom: 24, borderRadius: 16, overflow: 'hidden' },
   postImage: { width: '100%', height: 300, backgroundColor: '#F1F5F9' },
   attachment: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8EAF6', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#C5CAE9' },
@@ -716,7 +690,6 @@ const styles = StyleSheet.create({
   attachmentName: { fontSize: 15, fontWeight: '700', color: '#1A1B2D', marginBottom: 4 },
   attachmentSize: { fontSize: 13, color: '#9EA3AE' },
   
-  // Interactions
   messageButton: { marginBottom: 24, borderRadius: 16, overflow: 'hidden', shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
   messageButtonGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, paddingHorizontal: 20 },
   messageButtonText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
@@ -726,13 +699,12 @@ const styles = StyleSheet.create({
   repliesTitle: { fontSize: 16, fontWeight: '700', color: '#525769', marginTop: 8, marginBottom: 8 },
   emptyCommentsText: { textAlign: 'center', color: '#9EA3AE', marginTop: 20 },
 
-  // Comments & Replies (FIXED LAYOUT)
   commentRow: { flexDirection: 'row', marginBottom: 12, marginHorizontal: 16 },
   replyRow: { 
     marginLeft: 16, 
     borderLeftWidth: 2, 
     borderLeftColor: '#F0F0F0',
-    paddingLeft: 8, // Tighter padding
+    paddingLeft: 8, 
   },
   
   avatarContainer: { marginRight: 12, alignItems: 'center' },
@@ -742,32 +714,30 @@ const styles = StyleSheet.create({
   commentContent: { flex: 1 }, 
   
   commentBubble: { backgroundColor: '#F7F8FA', borderRadius: 16, padding: 12, alignSelf: 'flex-start' },
-  replyBubble: { padding: 8, borderRadius: 12 }, // Smaller bubble for replies
+  replyBubble: { padding: 8, borderRadius: 12 },
 
   commentHeader: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     marginBottom: 4, 
-    flexWrap: 'wrap' // Ensures name + program wraps if too long
+    flexWrap: 'wrap' 
   },
   commentAuthor: { 
     fontSize: 14, 
     fontWeight: '700', 
     color: '#1A1B2D', 
-    marginRight: 8, // Space between name and program
-    flexShrink: 1 // Prevents name from pushing program off screen
+    marginRight: 8, 
+    flexShrink: 1 
   },
   programBadge: { backgroundColor: '#E0E0E0', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   programText: { fontSize: 10, fontWeight: '600', color: '#666' },
   commentText: { fontSize: 14, color: '#525769', lineHeight: 20 },
   
-  // Comment Actions
   commentActions: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 12, paddingLeft: 4 },
   timestampText: { fontSize: 12, color: '#9EA3AE' },
   actionLink: { fontSize: 12, fontWeight: '600', color: '#555' },
   deleteAction: { color: COLORS.error },
 
-  // Input Section
   commentSection: { backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
   inputContext: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, backgroundColor: '#F5F5F5', padding: 8, borderRadius: 8 },
   contextText: { fontSize: 12, fontStyle: 'italic', color: '#666', flex: 1 },
@@ -776,7 +746,6 @@ const styles = StyleSheet.create({
   sendButton: { width: 48, height: 48, borderRadius: 24, overflow: 'hidden' },
   sendButtonGradient: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
   
-  // Modal
   modalContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   closeModalButton: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10 },
   fullScreenImage: { width: '100%', height: '80%' },

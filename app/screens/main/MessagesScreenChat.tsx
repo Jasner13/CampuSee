@@ -1,4 +1,3 @@
-// app/screens/main/MessagesScreenChat.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
@@ -27,10 +26,8 @@ import { Avatar } from '../../components/Avatar';
 import { Message } from '../../types';
 import { Ionicons } from '@expo/vector-icons';
 
-// --- File Handling Imports ---
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-// UPDATED IMPORT: Using legacy to fix deprecation error
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { Video, ResizeMode } from 'expo-av';
@@ -38,10 +35,8 @@ import { Video, ResizeMode } from 'expo-av';
 type MessagesScreenChatNavigationProp = NativeStackNavigationProp<RootStackParamList, 'MessagesChat'>;
 type MessagesScreenChatRouteProp = RouteProp<RootStackParamList, 'MessagesChat'>;
 
-// Max file size for chat (e.g., 10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-// Helper: Format "Last Seen"
 const formatLastSeen = (dateString?: string | null) => {
   if (!dateString) return 'Offline';
   
@@ -68,17 +63,15 @@ export default function MessagesScreenChat() {
   const route = useRoute<MessagesScreenChatRouteProp>();
   const { session, onlineUsers } = useAuth();
 
-  const { peerId, peerName, peerInitials, peerAvatarUrl } = route.params;
+  const { peerId, peerName, peerInitials, peerAvatarUrl, postContext } = route.params;
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [peerLastSeen, setPeerLastSeen] = useState<string | null>(null);
 
-  // Check if peer is online via Realtime Presence
   const isPeerOnline = onlineUsers.has(peerId);
 
-  // --- Attachment State ---
   const [attachment, setAttachment] = useState<{
     uri: string;
     type: 'image' | 'video' | 'file';
@@ -88,7 +81,15 @@ export default function MessagesScreenChat() {
     extension?: string;
   } | null>(null);
 
-  // --- Keyboard State for Android Fix ---
+  const [pendingPost, setPendingPost] = useState<{
+    id: string;
+    title: string;
+    description: string;
+    fileUrl?: string | null;
+    fileType?: string | null;
+    postAuthor?: string;
+  } | null>(null);
+
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
   const scrollViewRef = useRef<ScrollView>(null);
@@ -97,7 +98,12 @@ export default function MessagesScreenChat() {
     navigation.goBack();
   };
 
-  // --- Fetch Peer Profile for Last Seen ---
+  useEffect(() => {
+    if (postContext) {
+      setPendingPost(postContext);
+    }
+  }, [postContext]);
+
   useEffect(() => {
     const fetchPeerStatus = async () => {
         const { data } = await supabase
@@ -113,7 +119,6 @@ export default function MessagesScreenChat() {
     fetchPeerStatus();
   }, [peerId]);
 
-  // --- Keyboard Listener for Android Fix ---
   useEffect(() => {
     if (Platform.OS === 'android') {
       const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
@@ -195,9 +200,7 @@ export default function MessagesScreenChat() {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
-  }, [messages, attachment]);
-
-  // --- Attachment Handlers ---
+  }, [messages, attachment, pendingPost]);
 
   const validateSize = (size?: number) => {
     if (size && size > MAX_FILE_SIZE) {
@@ -236,6 +239,7 @@ export default function MessagesScreenChat() {
         size: asset.fileSize,
         extension
       });
+      setPendingPost(null);
     }
   };
 
@@ -261,6 +265,7 @@ export default function MessagesScreenChat() {
           size: file.size,
           extension
         });
+        setPendingPost(null);
       }
     } catch (err) {
       console.log('Document picker error', err);
@@ -283,7 +288,6 @@ export default function MessagesScreenChat() {
     if (!attachment || !session?.user) return null;
 
     try {
-      // Use legacy FileSystem.readAsStringAsync
       const base64 = await FileSystem.readAsStringAsync(attachment.uri, {
         encoding: 'base64',
       });
@@ -314,17 +318,17 @@ export default function MessagesScreenChat() {
     }
   };
 
-  // --- Send Message ---
-
   const handleSend = async () => {
-    if ((!messageText.trim() && !attachment) || !session?.user || sending) return;
+    if ((!messageText.trim() && !attachment && !pendingPost) || !session?.user || sending) return;
 
     setSending(true);
     let finalContent = messageText.trim();
     const tempAttachment = attachment; 
+    const tempPost = pendingPost;
 
     setMessageText('');
     setAttachment(null);
+    setPendingPost(null);
 
     try {
       if (tempAttachment) {
@@ -347,6 +351,19 @@ export default function MessagesScreenChat() {
         
         finalContent = JSON.stringify(attachmentData);
       }
+      else if (tempPost) {
+        // Embed the author name into the payload
+        const shareData = {
+            type: 'share_post',
+            postId: tempPost.id,
+            title: tempPost.title,
+            description: tempPost.description,
+            thumbnail: tempPost.fileUrl,
+            postAuthor: tempPost.postAuthor, // <--- SAVED HERE
+            caption: finalContent
+        };
+        finalContent = JSON.stringify(shareData);
+      }
 
       const { data, error } = await supabase
         .from('messages')
@@ -365,7 +382,7 @@ export default function MessagesScreenChat() {
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      if (!attachment) setMessageText(finalContent); 
+      if (!attachment && !pendingPost) setMessageText(finalContent); 
       Alert.alert('Error', 'Failed to send message');
     } finally {
       setSending(false);
@@ -411,14 +428,11 @@ export default function MessagesScreenChat() {
     return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // --- Render Content Logic ---
-
   const renderMessageContent = (content: string, isSentByMe: boolean) => {
       try {
           if (content && content.trim().startsWith('{')) {
               const parsed = JSON.parse(content);
 
-              // 1. Shared Post
               if (parsed.type === 'share_post') {
                   const fileUrl = parsed.thumbnail;
                   const getExt = (url: string) => url?.split('?')[0]?.split('.')?.pop()?.toLowerCase() || '';
@@ -428,53 +442,68 @@ export default function MessagesScreenChat() {
                   const isVideo = ['mp4', 'mov', 'avi', '3gp'].includes(ext);
                   const isDocument = fileUrl && !isImage && !isVideo;
 
+                  // --- DYNAMIC HEADER TEXT ---
+                  let headerText = 'Shared a Post';
+                  if (parsed.postAuthor) {
+                      headerText = isSentByMe 
+                        ? `You replied to their post` 
+                        : `Replied to your post`;
+                  }
+
                   return (
-                      <TouchableOpacity 
-                        style={styles.sharedPostContainer}
-                        onPress={() => handlePostPress(parsed.postId)}
-                        activeOpacity={0.9}
-                      >
-                          <View style={styles.sharedPostHeader}>
-                              <Ionicons name="share-social" size={16} color={isSentByMe ? '#FFF' : COLORS.primary} />
-                              <Text style={[styles.sharedPostLabel, isSentByMe ? {color:'#FFF'} : {color: COLORS.primary}]}>
-                                  Shared a Post
-                              </Text>
-                          </View>
-                          <View style={styles.sharedPostCard}>
-                              {fileUrl && isImage && (
-                                  <Image 
-                                    source={{ uri: fileUrl }} 
-                                    style={styles.sharedPostImage} 
-                                    resizeMode="cover"
-                                  />
-                              )}
-                              
-                              {fileUrl && isVideo && (
-                                  <View style={[styles.sharedPostImage, styles.sharedPostVideoPlaceholder]}>
-                                      <Ionicons name="play-circle" size={32} color="white" />
-                                  </View>
-                              )}
+                      <View>
+                        <TouchableOpacity 
+                            style={styles.sharedPostContainer}
+                            onPress={() => handlePostPress(parsed.postId)}
+                            activeOpacity={0.9}
+                        >
+                            <View style={styles.sharedPostHeader}>
+                                <Ionicons name="return-up-back" size={16} color={isSentByMe ? '#FFF' : COLORS.primary} />
+                                <Text style={[styles.sharedPostLabel, isSentByMe ? {color:'#FFF'} : {color: COLORS.primary}]}>
+                                    {headerText}
+                                </Text>
+                            </View>
+                            <View style={styles.sharedPostCard}>
+                                {fileUrl && isImage && (
+                                    <Image 
+                                        source={{ uri: fileUrl }} 
+                                        style={styles.sharedPostImage} 
+                                        resizeMode="cover"
+                                    />
+                                )}
+                                
+                                {fileUrl && isVideo && (
+                                    <View style={[styles.sharedPostImage, styles.sharedPostVideoPlaceholder]}>
+                                        <Ionicons name="play-circle" size={32} color="white" />
+                                    </View>
+                                )}
 
-                              {fileUrl && isDocument && (
-                                  <View style={styles.sharedPostFileContainer}>
-                                      <View style={styles.sharedPostFileIcon}>
-                                          <Ionicons name="document-text" size={24} color={COLORS.primary} />
-                                      </View>
-                                      <Text style={styles.sharedPostFileName} numberOfLines={1}>
-                                          {decodeURIComponent(fileUrl.split('/').pop()?.split('?')[0] || 'Attachment')}
-                                      </Text>
-                                  </View>
-                              )}
+                                {fileUrl && isDocument && (
+                                    <View style={styles.sharedPostFileContainer}>
+                                        <View style={styles.sharedPostFileIcon}>
+                                            <Ionicons name="document-text" size={24} color={COLORS.primary} />
+                                        </View>
+                                        <Text style={styles.sharedPostFileName} numberOfLines={1}>
+                                            {decodeURIComponent(fileUrl.split('/').pop()?.split('?')[0] || 'Attachment')}
+                                        </Text>
+                                    </View>
+                                )}
 
-                              <Text numberOfLines={1} style={styles.sharedPostTitle}>{parsed.title}</Text>
-                              <Text numberOfLines={2} style={styles.sharedPostDesc}>{parsed.description}</Text>
-                              <Text style={styles.sharedPostCta}>Tap to view</Text>
-                          </View>
-                      </TouchableOpacity>
+                                <Text numberOfLines={1} style={styles.sharedPostTitle}>{parsed.title}</Text>
+                                <Text numberOfLines={2} style={styles.sharedPostDesc}>{parsed.description}</Text>
+                                <Text style={styles.sharedPostCta}>Tap to view</Text>
+                            </View>
+                        </TouchableOpacity>
+                        
+                        {parsed.caption ? (
+                            <Text style={[styles.messageText, { marginTop: 8 }, isSentByMe ? styles.messageTextSent : styles.messageTextReceived]}>
+                                {parsed.caption}
+                            </Text>
+                        ) : null}
+                      </View>
                   );
               }
 
-              // 2. Direct Image Attachment
               if (parsed.type === 'image') {
                   return (
                       <View>
@@ -488,7 +517,6 @@ export default function MessagesScreenChat() {
                   );
               }
 
-              // 3. Direct Video Attachment
               if (parsed.type === 'video') {
                   return (
                       <View style={{ width: 200 }}>
@@ -508,7 +536,6 @@ export default function MessagesScreenChat() {
                   );
               }
 
-              // 4. Direct File Attachment
               if (parsed.type === 'file') {
                   return (
                       <View>
@@ -538,7 +565,6 @@ export default function MessagesScreenChat() {
           }
       } catch (e) {}
 
-      // Default Text
       return (
         <Text style={[
             styles.messageText,
@@ -571,7 +597,6 @@ export default function MessagesScreenChat() {
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerName}>{peerName}</Text>
-            {/* --- UPDATED STATUS LOGIC --- */}
             <Text style={[styles.headerStatus, isPeerOnline ? { color: COLORS.success } : { color: COLORS.textTertiary }]}>
                 {isPeerOnline ? 'Active now' : formatLastSeen(peerLastSeen)}
             </Text>
@@ -625,7 +650,31 @@ export default function MessagesScreenChat() {
         )}
 
         <View style={styles.inputContainer}>
-          {/* Attachment Preview */}
+          
+          {pendingPost && (
+            <View style={styles.contextPreview}>
+               <View style={styles.contextHeader}>
+                  <Text style={styles.contextLabel}>Replying to {pendingPost.postAuthor ? pendingPost.postAuthor : 'post'}:</Text>
+                  <TouchableOpacity onPress={() => setPendingPost(null)}>
+                      <Ionicons name="close-circle" size={20} color={COLORS.textTertiary} />
+                  </TouchableOpacity>
+               </View>
+               <View style={styles.contextCard}>
+                  <View style={styles.contextThumb}>
+                     {pendingPost.fileUrl ? (
+                        <Image source={{ uri: pendingPost.fileUrl }} style={{ width: '100%', height: '100%' }} />
+                     ) : (
+                        <Ionicons name="document-text" size={20} color={COLORS.primary} />
+                     )}
+                  </View>
+                  <View style={{flex: 1}}>
+                      <Text style={styles.contextTitle} numberOfLines={1}>{pendingPost.title}</Text>
+                      <Text style={styles.contextDesc} numberOfLines={1}>{pendingPost.description}</Text>
+                  </View>
+               </View>
+            </View>
+          )}
+
           {attachment && (
             <View style={styles.attachmentPreview}>
                 <View style={styles.attachmentInfo}>
@@ -664,17 +713,17 @@ export default function MessagesScreenChat() {
 
             <TextInput
               style={styles.input}
-              placeholder={attachment ? "Add a caption..." : "Send a message..."}
+              placeholder={attachment || pendingPost ? "Add a message..." : "Send a message..."}
               placeholderTextColor={COLORS.lightGray}
               value={messageText}
               onChangeText={setMessageText}
               multiline
             />
             <TouchableOpacity
-              style={[styles.sendButton, (!messageText.trim() && !attachment || sending) && { opacity: 0.5 }]}
+              style={[styles.sendButton, (!messageText.trim() && !attachment && !pendingPost || sending) && { opacity: 0.5 }]}
               onPress={handleSend}
               activeOpacity={0.8}
-              disabled={(!messageText.trim() && !attachment) || sending}
+              disabled={(!messageText.trim() && !attachment && !pendingPost) || sending}
             >
               {sending ? (
                   <ActivityIndicator size="small" color="#FFF" />
@@ -955,5 +1004,46 @@ const styles = StyleSheet.create({
   },
   removeAttachment: {
       padding: 4,
+  },
+  contextPreview: {
+      backgroundColor: '#F3F4F6',
+      borderRadius: 12,
+      padding: 10,
+      marginBottom: 10,
+      borderLeftWidth: 4,
+      borderLeftColor: COLORS.primary,
+  },
+  contextHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 6,
+  },
+  contextLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: COLORS.textSecondary,
+  },
+  contextCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+  },
+  contextThumb: {
+      width: 40,
+      height: 40,
+      borderRadius: 6,
+      backgroundColor: '#E0E7FF',
+      justifyContent: 'center',
+      alignItems: 'center',
+      overflow: 'hidden',
+  },
+  contextTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: COLORS.textPrimary,
+  },
+  contextDesc: {
+      fontSize: 12,
+      color: COLORS.textTertiary,
   }
 });
