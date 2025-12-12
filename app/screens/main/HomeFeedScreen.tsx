@@ -292,8 +292,6 @@ export const HomeFeedScreen: React.FC = () => {
         )}
       </ScrollView>
 
-      <BottomNav selected="home" onNavigate={handleNavigate} onCreatePost={handleCreatePost} />
-
       {/* Modals */}
       {selectedUserId && (
           <UserProfileModal 
