@@ -9,10 +9,10 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<{ error: any }>;
-  signup: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
+  signup: (email: string, password: string) => Promise<{ error: any }>;
   verifyOtp: (email: string, token: string) => Promise<{ error: any }>;
-  // Add resendOtp to interface
   resendOtp: (email: string) => Promise<{ error: any }>;
+  resetPassword: (email: string) => Promise<{ error: any }>;
   logout: () => void;
   refreshProfile: () => Promise<void>;
 }
@@ -89,15 +89,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { error };
   };
 
-  const signup = async (email: string, password: string, fullName: string) => {
+  // FIX: Reverted to only email and password.
+  // The name is now handled by SetupProfileScreen.
+  const signup = async (email: string, password: string) => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          full_name: fullName,
-        },
-      },
     });
     return { error };
   };
@@ -111,11 +108,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { error };
   };
 
-  // Implement resendOtp
   const resendOtp = async (email: string) => {
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email,
+    });
+    return { error };
+  };
+
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: 'campusee://reset-password', 
     });
     return { error };
   };
@@ -141,6 +144,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         signup,
         verifyOtp,
         resendOtp,
+        resetPassword,
         logout,
         refreshProfile,
       }}
