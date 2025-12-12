@@ -76,6 +76,9 @@ export default function PostDetailScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [imageModalVisible, setImageModalVisible] = useState(false);
+  
+  // New State for checking author permissions
+  const [areInteractionsAllowed, setAreInteractionsAllowed] = useState(true);
 
   const displayFileName = 
     (post as any).fileName || 
@@ -95,11 +98,31 @@ export default function PostDetailScreen() {
     fetchComments();
     fetchInteractionStatus();
     fetchLikesCount();
-  }, [post.id]);
+    checkAuthorSettings();
+  }, [post.id, post.userId]);
 
   useEffect(() => {
     structureComments(comments);
   }, [comments]);
+
+  const checkAuthorSettings = async () => {
+    if (!post.userId) return;
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('settings')
+        .eq('id', post.userId)
+        .single();
+      
+      if (data?.settings?.post_interactions === false) {
+        setAreInteractionsAllowed(false);
+      } else {
+        setAreInteractionsAllowed(true);
+      }
+    } catch (e) {
+      console.log('Error checking settings:', e);
+    }
+  };
 
   const structureComments = (flatComments: ExtendedComment[]) => {
     const commentMap = new Map<string, ExtendedComment>();
@@ -176,6 +199,12 @@ export default function PostDetailScreen() {
   const handleLike = async () => {
     if (!currentUserId) return;
 
+    // Check permissions
+    if (!areInteractionsAllowed) {
+        Alert.alert('Interactions Disabled', 'The author has turned off interactions for this post.');
+        return;
+    }
+
     const previousLiked = isLiked;
     const previousCount = likesCount;
     setIsLiked(!isLiked);
@@ -222,6 +251,7 @@ export default function PostDetailScreen() {
   };
 
   const initiateReply = (comment: ExtendedComment) => {
+    if (!areInteractionsAllowed) return; // Prevent reply if disabled
     setReplyingTo(comment);
     setEditingComment(null);
     setCommentText('');
@@ -264,6 +294,8 @@ export default function PostDetailScreen() {
 
   const handleSendComment = async () => {
     if (!commentText.trim() || !currentUserId) return;
+    if (!areInteractionsAllowed && !editingComment) return; // Allow editing existing own comments maybe? Standard: yes.
+
     setSendingComment(true);
 
     try {
@@ -301,8 +333,7 @@ export default function PostDetailScreen() {
 
         // --- NOTIFICATION LOGIC START ---
         
-        // 1. Notify Post Author (for direct comments on the post)
-        // Only if it's NOT a reply to a comment, and user isn't commenting on their own post
+        // 1. Notify Post Author
         if (!parentId && post.userId !== currentUserId) {
           await supabase.from('notifications').insert({
             user_id: post.userId,
@@ -315,8 +346,7 @@ export default function PostDetailScreen() {
           });
         }
 
-        // 2. Notify Parent Comment Author (for replies)
-        // If replying to someone else's comment
+        // 2. Notify Parent Comment Author
         if (parentId && replyingTo && replyingTo.user_id !== currentUserId) {
             await supabase.from('notifications').insert({
                 user_id: replyingTo.user_id,
@@ -324,7 +354,7 @@ export default function PostDetailScreen() {
                 type: 'comment',
                 title: 'New Reply',
                 content: `Replied: ${commentText.trim().substring(0, 50)}...`,
-                resource_id: post.id, // Link to the same post
+                resource_id: post.id, 
                 is_read: false
             });
         }
@@ -484,7 +514,12 @@ export default function PostDetailScreen() {
           )}
 
           <View style={styles.statsRow}>
-            <TouchableOpacity style={styles.statItem} onPress={handleLike} activeOpacity={0.7}>
+            <TouchableOpacity 
+                style={[styles.statItem, !areInteractionsAllowed && { opacity: 0.5 }]} 
+                onPress={handleLike} 
+                activeOpacity={0.7}
+                disabled={!areInteractionsAllowed}
+            >
               <Ionicons name={isLiked ? "heart" : "heart-outline"} size={20} color={isLiked ? COLORS.error : "#9EA3AE"} />
               <Text style={styles.statNumber}>{likesCount}</Text>
             </TouchableOpacity>
@@ -542,7 +577,7 @@ export default function PostDetailScreen() {
               {new Date(item.created_at).toLocaleDateString()}
             </Text>
             
-            {!isReply && (
+            {!isReply && areInteractionsAllowed && (
               <TouchableOpacity onPress={() => initiateReply(item)} hitSlop={{top:10,bottom:10,left:10,right:10}}>
                 <Text style={styles.actionLink}>Reply</Text>
               </TouchableOpacity>
@@ -618,47 +653,56 @@ export default function PostDetailScreen() {
         {!isEditing && (
           <View style={[styles.commentSection, { paddingBottom: Math.max(insets.bottom, 10) }]}>
             
-            {(replyingTo || editingComment) && (
-              <View style={styles.inputContext}>
-                 <Text style={styles.contextText} numberOfLines={1}>
-                    {replyingTo ? `Replying to ${replyingTo.profiles?.full_name}...` : 'Editing comment...'}
-                 </Text>
-                 <TouchableOpacity onPress={cancelInputMode}>
-                    <Ionicons name="close-circle" size={20} color={COLORS.textTertiary} />
-                 </TouchableOpacity>
-              </View>
-            )}
+            {!areInteractionsAllowed ? (
+                 <View style={styles.disabledContainer}>
+                    <Ionicons name="lock-closed-outline" size={20} color={COLORS.textTertiary} />
+                    <Text style={styles.disabledText}>Comments are disabled for this post.</Text>
+                 </View>
+            ) : (
+                <>
+                {(replyingTo || editingComment) && (
+                  <View style={styles.inputContext}>
+                     <Text style={styles.contextText} numberOfLines={1}>
+                        {replyingTo ? `Replying to ${replyingTo.profiles?.full_name}...` : 'Editing comment...'}
+                     </Text>
+                     <TouchableOpacity onPress={cancelInputMode}>
+                        <Ionicons name="close-circle" size={20} color={COLORS.textTertiary} />
+                     </TouchableOpacity>
+                  </View>
+                )}
 
-            <View style={styles.inputRow}>
-              <TextInput
-                ref={inputRef}
-                style={styles.commentInput}
-                placeholder={replyingTo ? "Write a reply..." : "Add a public comment..."}
-                placeholderTextColor={COLORS.textTertiary}
-                value={commentText}
-                onChangeText={setCommentText}
-                multiline={false}
-              />
-              <TouchableOpacity
-                style={styles.sendButton}
-                onPress={handleSendComment}
-                activeOpacity={0.7}
-                disabled={sendingComment}
-              >
-                <LinearGradient
-                  colors={editingComment ? [COLORS.secondary, COLORS.secondary] : GRADIENTS.primary}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.sendButtonGradient}
-                >
-                  {sendingComment ? (
-                    <ActivityIndicator size="small" color="#FFF" />
-                  ) : (
-                    <Ionicons name={editingComment ? "checkmark" : "arrow-up"} size={20} color="#FFFFFF" />
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
+                <View style={styles.inputRow}>
+                  <TextInput
+                    ref={inputRef}
+                    style={styles.commentInput}
+                    placeholder={replyingTo ? "Write a reply..." : "Add a public comment..."}
+                    placeholderTextColor={COLORS.textTertiary}
+                    value={commentText}
+                    onChangeText={setCommentText}
+                    multiline={false}
+                  />
+                  <TouchableOpacity
+                    style={styles.sendButton}
+                    onPress={handleSendComment}
+                    activeOpacity={0.7}
+                    disabled={sendingComment}
+                  >
+                    <LinearGradient
+                      colors={editingComment ? [COLORS.secondary, COLORS.secondary] : GRADIENTS.primary}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.sendButtonGradient}
+                    >
+                      {sendingComment ? (
+                        <ActivityIndicator size="small" color="#FFF" />
+                      ) : (
+                        <Ionicons name={editingComment ? "checkmark" : "arrow-up"} size={20} color="#FFFFFF" />
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+                </>
+            )}
           </View>
         )}
       </KeyboardAvoidingView>
@@ -767,4 +811,7 @@ const styles = StyleSheet.create({
   modalContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   closeModalButton: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10 },
   fullScreenImage: { width: '100%', height: '80%' },
+  
+  disabledContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, gap: 8 },
+  disabledText: { fontSize: 14, color: COLORS.textTertiary, fontStyle: 'italic' }
 });

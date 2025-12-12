@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
 export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }) => {
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
   
@@ -20,15 +20,38 @@ export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, nav
   useEffect(() => {
     if (!session?.user) return;
 
+    // SETTING CHECK: New Messages
+    // If the user turned off "New messages", we do not count them at all.
+    if (profile?.settings?.new_messages === false) {
+      setUnreadCount(0);
+      return;
+    }
+
     const fetchUnreadMessages = async () => {
+      // We fetch content as well to check if it's a "Reply to Post" type message
       const { data, error } = await supabase
         .from('messages')
-        .select('sender_id')
+        .select('sender_id, content') 
         .eq('receiver_id', session.user.id)
         .eq('is_read', false);
       
       if (!error && data) {
-        const uniqueSenders = new Set(data.map(msg => msg.sender_id));
+        let validMessages = data;
+
+        // SETTING CHECK: Replies to posts
+        // If "Replies to posts" is OFF, we filter out messages that are post shares/replies.
+        if (profile?.settings?.replies_to_posts === false) {
+             validMessages = data.filter(msg => {
+                 // "Send Private Message" sends a JSON string with type: 'share_post'
+                 // We exclude these if the setting is disabled.
+                 if (msg.content && msg.content.includes('"type":"share_post"')) {
+                     return false;
+                 }
+                 return true; 
+             });
+        }
+
+        const uniqueSenders = new Set(validMessages.map(msg => msg.sender_id));
         setUnreadCount(uniqueSenders.size);
       }
     };
@@ -46,7 +69,10 @@ export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, nav
           filter: `receiver_id=eq.${session.user.id}`,
         },
         () => {
-          fetchUnreadMessages();
+           // Refresh count when changes occur
+           if (profile?.settings?.new_messages !== false) {
+             fetchUnreadMessages();
+           }
         }
       )
       .subscribe();
@@ -54,18 +80,26 @@ export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, nav
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [session?.user]);
+  }, [session?.user, profile?.settings]); // Added profile.settings dependency
 
   // 2. Fetch Unread Notifications Count
   useEffect(() => {
     if (!session?.user) return;
 
     const fetchUnreadNotifications = async () => {
-      const { count, error } = await supabase
+      let query = supabase
         .from('notifications')
-        .select('*', { count: 'exact', head: true }) // head: true means we only want the count, not data
+        .select('*', { count: 'exact', head: true }) // head: true means we only want the count
         .eq('user_id', session.user.id)
         .eq('is_read', false);
+
+      // SETTING CHECK: Replies to posts (Notifications)
+      // If "Replies to posts" is OFF, ignore 'comment' notifications.
+      if (profile?.settings?.replies_to_posts === false) {
+        query = query.neq('type', 'comment');
+      }
+
+      const { count, error } = await query;
 
       if (!error && count !== null) {
         setNotificationCount(count);
@@ -85,7 +119,7 @@ export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, nav
           filter: `user_id=eq.${session.user.id}`,
         },
         () => {
-          fetchUnreadNotifications();
+           fetchUnreadNotifications();
         }
       )
       .subscribe();
@@ -93,7 +127,7 @@ export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, nav
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [session?.user]);
+  }, [session?.user, profile?.settings]);
 
   // Helper to handle navigation
   const handlePress = (routeIndex: number, routeName: string) => {
