@@ -15,13 +15,15 @@ import {
   Image,
   FlatList,
   RefreshControl,
-  SafeAreaView
+  Keyboard,
+  SafeAreaView as RNSafeAreaView 
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as WebBrowser from 'expo-web-browser';
 import { Video, ResizeMode } from 'expo-av';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../../navigation/types';
 import { GRADIENTS, COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
@@ -42,6 +44,7 @@ export default function PostDetailScreen() {
   const route = useRoute<PostDetailScreenRouteProp>();
   const { session } = useAuth();
   const currentUserId = session?.user?.id;
+  const insets = useSafeAreaInsets();
   
   const { post: initialPost } = route.params;
   const [post, setPost] = useState(initialPost);
@@ -52,6 +55,9 @@ export default function PostDetailScreen() {
   const [commentText, setCommentText] = useState('');
   const [sendingComment, setSendingComment] = useState(false);
   
+  // Keyboard State for Android Fix
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+
   const [likesCount, setLikesCount] = useState(0); 
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -88,6 +94,23 @@ export default function PostDetailScreen() {
     fetchInteractionStatus();
     fetchLikesCount();
   }, [post.id]);
+
+  // --- Keyboard Listener for Android Fix ---
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+        setKeyboardVisible(true);
+      });
+      const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+        setKeyboardVisible(false);
+      });
+
+      return () => {
+        keyboardDidShowListener.remove();
+        keyboardDidHideListener.remove();
+      };
+    }
+  }, []);
 
   const fetchComments = async () => {
     try {
@@ -168,7 +191,6 @@ export default function PostDetailScreen() {
         
         if (error) throw error;
 
-        // Send notification if not the post owner
         if (post.userId !== currentUserId) {
           await supabase.from('notifications').insert({
             user_id: post.userId, 
@@ -234,8 +256,10 @@ export default function PostDetailScreen() {
 
       setComments(prev => [...prev, data as Comment]);
       setCommentText('');
+      
+      // Dismiss keyboard after sending? Optional. keeping it open for rapid reply.
+      // Keyboard.dismiss();
 
-      // Send notification if not the post owner
       if (post.userId !== currentUserId) {
         await supabase.from('notifications').insert({
           user_id: post.userId,
@@ -593,13 +617,9 @@ export default function PostDetailScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
-    >
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" />
-
+      
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
@@ -629,64 +649,73 @@ export default function PostDetailScreen() {
         )}
       </View>
 
-      {/* Main Content List */}
-      <FlatList
-        data={isEditing ? [] : comments}
-        keyExtractor={(item) => item.id}
-        renderItem={renderComment}
-        ListHeaderComponent={renderHeader}
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl 
-            refreshing={loadingComments} 
-            onRefresh={() => {
-              fetchComments();
-              fetchLikesCount();
-            }} 
-          />
-        }
-        ListEmptyComponent={
-          !loadingComments && !isEditing ? (
-            <Text style={styles.emptyCommentsText}>
-              No comments yet. Be the first!
-            </Text>
-          ) : null
-        }
-      />
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'} 
+        enabled={Platform.OS === 'ios' ? true : isKeyboardVisible} // FORCE reset on Android when hidden
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : -30}
+      >
+        <FlatList
+          data={isEditing ? [] : comments}
+          keyExtractor={(item) => item.id}
+          renderItem={renderComment}
+          ListHeaderComponent={renderHeader}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl 
+              refreshing={loadingComments} 
+              onRefresh={() => {
+                fetchComments();
+                fetchLikesCount();
+              }} 
+            />
+          }
+          ListEmptyComponent={
+            !loadingComments && !isEditing ? (
+              <Text style={styles.emptyCommentsText}>
+                No comments yet. Be the first!
+              </Text>
+            ) : null
+          }
+        />
 
-      {/* Comment Input */}
-      {!isEditing && (
-        <View style={styles.commentSection}>
-          <TextInput
-            style={styles.commentInput}
-            placeholder="Add a public comment..."
-            placeholderTextColor={COLORS.textTertiary}
-            value={commentText}
-            onChangeText={setCommentText}
-            multiline={false}
-          />
-          <TouchableOpacity
-            style={styles.sendButton}
-            onPress={handleSendComment}
-            activeOpacity={0.7}
-            disabled={sendingComment}
-          >
-            <LinearGradient
-              colors={GRADIENTS.primary}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.sendButtonGradient}
+        {/* Comment Input */}
+        {!isEditing && (
+          <View style={[
+            styles.commentSection, 
+            { paddingBottom: Math.max(insets.bottom, 20) }
+          ]}>
+            <TextInput
+              style={styles.commentInput}
+              placeholder="Add a public comment..."
+              placeholderTextColor={COLORS.textTertiary}
+              value={commentText}
+              onChangeText={setCommentText}
+              multiline={false}
+            />
+            <TouchableOpacity
+              style={styles.sendButton}
+              onPress={handleSendComment}
+              activeOpacity={0.7}
+              disabled={sendingComment}
             >
-              {sendingComment ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      )}
+              <LinearGradient
+                colors={GRADIENTS.primary}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.sendButtonGradient}
+              >
+                {sendingComment ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
+      </KeyboardAvoidingView>
 
       {/* Image Preview Modal */}
       <Modal
@@ -695,7 +724,7 @@ export default function PostDetailScreen() {
         animationType="fade"
         onRequestClose={() => setImageModalVisible(false)}
       >
-        <SafeAreaView style={styles.modalContainer}>
+        <RNSafeAreaView style={styles.modalContainer}>
           <TouchableOpacity 
             style={styles.closeModalButton} 
             onPress={() => setImageModalVisible(false)}
@@ -710,24 +739,23 @@ export default function PostDetailScreen() {
               resizeMode="contain"
             />
           )}
-        </SafeAreaView>
+        </RNSafeAreaView>
       </Modal>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA', 
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 16,
+    paddingVertical: 12,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
@@ -997,7 +1025,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
   },
