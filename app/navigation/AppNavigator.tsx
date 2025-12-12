@@ -17,9 +17,22 @@ import MessagesScreenChat from '../screens/main/MessagesScreenChat';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const AppNavigator: React.FC = () => {
+  // Profile can now be undefined
   const { isAuthenticated, profile, isLoading } = useAuth();
 
+
+  // Global Loading (Initializing)
   if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background }}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
+  // Profile Loading (Authenticated but Profile fetch pending)
+  // This PREVENTS the flicker. We wait until we know if profile is null or exists.
+  if (isAuthenticated && profile === undefined) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background }}>
         <ActivityIndicator size="large" color={COLORS.primary} />
@@ -36,17 +49,15 @@ export const AppNavigator: React.FC = () => {
       }}
     >
       {!isAuthenticated ? (
-        // Case 1: Not Logged In -> Show Auth Flow
         <Stack.Screen name="Auth" component={AuthNavigator} />
       ) : !profile?.full_name ? (
-        // Case 2: Logged In but No Name -> Show Setup Flow
+        // Only show Setup if we are SURE the profile is loaded AND missing name
         <Stack.Screen 
           name="SetupProfile" 
           component={SetupProfileScreen} 
           options={{ animation: 'fade', gestureEnabled: false }} 
         />
       ) : (
-        // Case 3: Logged In & Has Name -> Show Main App
         <>
           <Stack.Screen name="Main" component={MainNavigator} />
           

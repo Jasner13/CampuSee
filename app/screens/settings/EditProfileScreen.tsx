@@ -10,7 +10,9 @@ import {
   Alert, 
   ActivityIndicator,
   Image,
-  Platform
+  Platform,
+  Modal,
+  SectionList
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,13 +24,66 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Profile } from '../../types';
 
-// NOTE: Programs list could be moved to a shared constant file later
-const PROGRAMS = [
-  'BS Computer Engineering',
-  'BS Computer Science',
-  'BS Information Technology',
-  'BS Software Engineering',
-  'BS Information Systems',
+// --- CIT PROGRAMS DATA (Categorized) ---
+const COLLEGE_PROGRAMS = [
+  {
+    title: 'College of Engineering and Architecture',
+    data: [
+      'BS Architecture',
+      'BS Chemical Engineering',
+      'BS Civil Engineering',
+      'BS Computer Engineering',
+      'BS Electrical Engineering',
+      'BS Electronics Engineering',
+      'BS Industrial Engineering',
+      'BS Mechanical Engineering',
+      'BS Mining Engineering',
+    ],
+  },
+  {
+    title: 'College of Management, Business & Accountancy',
+    data: [
+      'BS Accountancy',
+      'BS Accounting Information Systems',
+      'BS Management Accounting',
+      'BS Business Administration',
+      'BS Hospitality Management',
+      'BS Tourism Management',
+      'BS Office Administration',
+    ],
+  },
+  {
+    title: 'College of Arts, Sciences, & Education',
+    data: [
+      'AB Communication',
+      'AB English with Applied Linguistics',
+      'Bachelor of Elementary Education',
+      'Bachelor of Secondary Education',
+      'Bachelor of Multimedia Arts',
+      'BS Biology',
+      'BS Math with Applied Industrial Mathematics',
+      'BS Psychology',
+    ],
+  },
+  {
+    title: 'College of Nursing & Allied Health Sciences',
+    data: [
+      'BS Nursing',
+      'BS Pharmacy',
+      'BS Medical Technology',
+    ],
+  },
+  {
+    title: 'College of Computer Studies',
+    data: [
+      'BS Computer Science',
+      'BS Information Technology',
+    ],
+  },
+  {
+    title: 'College of Criminal Justice',
+    data: ['BS Criminology'],
+  },
 ];
 
 export default function EditProfileScreen() {
@@ -48,7 +103,10 @@ export default function EditProfileScreen() {
   // UI State
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showProgramDropdown, setShowProgramDropdown] = useState(false);
+  
+  // Modal State (Replaces simple dropdown)
+  const [modalVisible, setModalVisible] = useState(false);
+  const [searchText, setSearchText] = useState('');
 
   useEffect(() => {
     if (session?.user) {
@@ -103,7 +161,7 @@ export default function EditProfileScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.5,
-      base64: true, // Needed for Supabase Upload
+      base64: true, 
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -124,7 +182,6 @@ export default function EditProfileScreen() {
       const ext = avatarExtension || 'jpg';
       const fileName = `${session.user.id}/${Date.now()}.${ext}`;
 
-      // Convert Base64 -> ArrayBuffer -> Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(fileName, decode(avatarBase64), {
@@ -155,7 +212,6 @@ export default function EditProfileScreen() {
 
       let finalAvatarUrl = avatarUrl;
 
-      // Only upload if a NEW photo was picked
       if (avatarBase64) {
         const uploadedUrl = await uploadAvatar();
         if (uploadedUrl) finalAvatarUrl = uploadedUrl;
@@ -189,9 +245,16 @@ export default function EditProfileScreen() {
     }
   };
 
-  const selectProgram = (selectedProgram: string) => {
-    setProgram(selectedProgram);
-    setShowProgramDropdown(false);
+  // Helper to filter sections based on search
+  const getFilteredSections = () => {
+    if (!searchText) return COLLEGE_PROGRAMS;
+    
+    return COLLEGE_PROGRAMS.map(section => ({
+      ...section,
+      data: section.data.filter(item => 
+        item.toLowerCase().includes(searchText.toLowerCase())
+      )
+    })).filter(section => section.data.length > 0);
   };
 
   const bioLength = bio.length;
@@ -272,12 +335,12 @@ export default function EditProfileScreen() {
           </View>
         </View>
 
-        {/* Program Dropdown */}
+        {/* Program Selector (Now opens Modal) */}
         <View style={styles.inputSection}>
           <Text style={styles.label}>Program</Text>
           <TouchableOpacity
             style={styles.dropdownContainer}
-            onPress={() => setShowProgramDropdown(!showProgramDropdown)}
+            onPress={() => setModalVisible(true)}
             activeOpacity={0.7}
           >
             <Ionicons name="school-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
@@ -285,37 +348,11 @@ export default function EditProfileScreen() {
               {program || 'Select Program'}
             </Text>
             <Ionicons 
-              name={showProgramDropdown ? "chevron-up" : "chevron-down"} 
+              name="chevron-down" 
               size={20} 
               color="#9CA3AF" 
             />
           </TouchableOpacity>
-
-          {showProgramDropdown && (
-            <View style={styles.dropdownMenu}>
-              {PROGRAMS.map((prog, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.dropdownItem,
-                    prog === program && styles.dropdownItemSelected,
-                    index === PROGRAMS.length - 1 && { borderBottomWidth: 0 }
-                  ]}
-                  onPress={() => selectProgram(prog)}
-                >
-                  <Text style={[
-                    styles.dropdownItemText,
-                    prog === program && styles.dropdownItemTextSelected
-                  ]}>
-                    {prog}
-                  </Text>
-                  {prog === program && (
-                    <Ionicons name="checkmark" size={18} color={COLORS.primary} />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
         </View>
 
         {/* Bio Input */}
@@ -362,6 +399,63 @@ export default function EditProfileScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
+
+      {/* --- PROGRAM SELECTION MODAL --- */}
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet" 
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Program</Text>
+            <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeButton}>
+              <Ionicons name="close" size={24} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.searchContainer}>
+              <Ionicons name="search" size={20} color={COLORS.textTertiary} style={{marginRight: 8}} />
+              <TextInput 
+                style={styles.searchInput}
+                placeholder="Search program..."
+                placeholderTextColor={COLORS.textTertiary}
+                value={searchText}
+                onChangeText={setSearchText}
+                autoCorrect={false}
+              />
+          </View>
+
+          <SectionList
+            sections={getFilteredSections()}
+            keyExtractor={(item, index) => item + index}
+            renderItem={({ item }) => (
+              <TouchableOpacity 
+                style={[styles.programItem, program === item && styles.programItemSelected]}
+                onPress={() => {
+                  setProgram(item);
+                  setModalVisible(false);
+                  setSearchText('');
+                }}
+              >
+                <Text style={[styles.programText, program === item && styles.programTextSelected]}>
+                  {item}
+                </Text>
+                {program === item && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
+              </TouchableOpacity>
+            )}
+            renderSectionHeader={({ section: { title } }) => (
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionHeaderText}>{title}</Text>
+              </View>
+            )}
+            contentContainerStyle={{ paddingBottom: 40 }}
+            stickySectionHeadersEnabled={false}
+          />
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -488,39 +582,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#1F2937',
   },
-  dropdownMenu: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    marginTop: 8,
-    overflow: 'hidden',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  dropdownItemSelected: {
-    backgroundColor: '#F0F9FF',
-  },
-  dropdownItemText: {
-    fontSize: 15,
-    color: '#1F2937',
-  },
-  dropdownItemTextSelected: {
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
   textAreaContainer: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
@@ -580,5 +641,77 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    margin: 16,
+    paddingHorizontal: 12,
+    height: 44,
+    borderRadius: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: COLORS.textPrimary,
+    height: '100%',
+  },
+  sectionHeader: {
+    backgroundColor: '#F8FAFC',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    marginTop: 10,
+  },
+  sectionHeaderText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  programItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  programItemSelected: {
+    backgroundColor: '#F0F9FF',
+  },
+  programText: {
+    fontSize: 15,
+    color: COLORS.textPrimary,
+  },
+  programTextSelected: {
+    fontWeight: '600',
+    color: COLORS.primary,
   },
 });

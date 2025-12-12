@@ -5,24 +5,25 @@ import { Profile } from '../types';
 
 interface AuthContextType {
   session: Session | null;
-  profile: Profile | null; // Added profile to context
+  // Allow undefined to signify "loading"
+  profile: Profile | null | undefined; 
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<{ error: any }>;
-  signup: (email: string, password: string) => Promise<{ error: any }>;
+  signup: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
   verifyOtp: (email: string, token: string) => Promise<{ error: any }>;
   logout: () => void;
-  refreshProfile: () => Promise<void>; // Added to manually trigger profile update
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  // Initialize as undefined
+  const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Helper function to fetch profile data
   const fetchProfile = async (currentSession: Session | null) => {
     if (!currentSession?.user) {
       setProfile(null);
@@ -37,7 +38,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .single();
 
       if (error) {
-        // If the error is "Row not found" (PGRST116), it's expected for new users
         if (error.code !== 'PGRST116') {
           console.error('Error fetching profile:', error);
         }
@@ -52,7 +52,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   useEffect(() => {
-    // 1. Check if user is already logged in when app starts
     const initializeAuth = async () => {
       try {
         const { data: { session: initialSession } } = await supabase.auth.getSession();
@@ -67,13 +66,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     initializeAuth();
 
-    // 2. Listen for auth changes (login, logout, auto-refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       setSession(newSession);
       
       if (_event === 'SIGNED_OUT') {
         setProfile(null);
       } else if (newSession) {
+        // If the session changed (e.g. login), we fetch the profile.
+        // The profile state will transition from undefined (or old) -> new data
         await fetchProfile(newSession);
       }
       
@@ -91,10 +91,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { error };
   };
 
-  const signup = async (email: string, password: string) => {
+  const signup = async (email: string, password: string, fullName: string) => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          full_name: fullName,
+        },
+      },
     });
     return { error };
   };
