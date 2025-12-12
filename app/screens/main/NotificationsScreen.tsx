@@ -8,13 +8,17 @@ import {
   TouchableOpacity, 
   RefreshControl, 
   ActivityIndicator,
-  Alert 
+  Alert,
+  Platform,
+  UIManager,
+  LayoutAnimation
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { Feather } from '@expo/vector-icons'; 
 
 import { COLORS } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
@@ -23,6 +27,13 @@ import { Notification } from '../../types';
 import { Post } from '../../components/cards/PostCard';
 import { Avatar } from '../../components/Avatar';
 import { UserProfileModal } from '../../components/modals/UserProfileModal';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android') {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+}
 
 type NotificationsScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Notifications'>,
@@ -40,6 +51,10 @@ export default function NotificationsScreen() {
 
   const [userModalVisible, setUserModalVisible] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+
+  // --- Menu State ---
+  // We only track the ID of the currently open menu
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return '??';
@@ -88,7 +103,6 @@ export default function NotificationsScreen() {
 
       if (error) throw error;
 
-      // Filter and Map
       const formattedNotifications: Notification[] = (data || [])
         .map((item: any) => ({
           id: item.id,
@@ -102,7 +116,6 @@ export default function NotificationsScreen() {
           resource_id: item.resource_id,
           actor: Array.isArray(item.actor) ? item.actor[0] : item.actor
         }))
-        // SAFETY FILTER: Remove notifications that require a link but don't have one
         .filter(n => {
             if (['like', 'comment', 'event'].includes(n.type) && !n.resource_id) {
                 return false;
@@ -223,6 +236,16 @@ export default function NotificationsScreen() {
   };
 
   const handleNotificationPress = async (notification: Notification) => {
+    // If menu is open, just close it and don't navigate
+    if (openMenuId === notification.id) {
+      toggleMenu(notification.id);
+      return;
+    }
+    // If another menu is open, close it
+    if (openMenuId) {
+      setOpenMenuId(null);
+    }
+
     if (!notification.is_read) {
       setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
       supabase.from('notifications').update({ is_read: true }).eq('id', notification.id).then();
@@ -237,6 +260,30 @@ export default function NotificationsScreen() {
         if (notification.resource_id) {
             await handleNavigateToPost(notification.resource_id);
         }
+    }
+  };
+
+  // --- Menu Handlers ---
+
+  const toggleMenu = (id: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setOpenMenuId(prev => prev === id ? null : id);
+  };
+
+  const handleTurnOffNotification = () => {
+    Alert.alert("Notifications", "You will no longer receive updates about this post.");
+    setOpenMenuId(null);
+  };
+
+  const handleDeleteNotification = async (id: string) => {
+    // Optimistic Update
+    setOpenMenuId(null);
+    setNotifications(prev => prev.filter(n => n.id !== id));
+    
+    try {
+      await supabase.from('notifications').delete().eq('id', id);
+    } catch (err) {
+      console.error("Failed to delete notification", err);
     }
   };
 
@@ -277,6 +324,7 @@ export default function NotificationsScreen() {
             const actorName = notification.actor?.full_name || 'System';
             const initials = getInitials(actorName);
             let displayContent = notification.content || '';
+            const isMenuOpen = openMenuId === notification.id;
 
             if (notification.type === 'comment') {
                 displayContent = displayContent.replace(/^Commented:\s*/i, '');
@@ -294,8 +342,12 @@ export default function NotificationsScreen() {
             return (
               <TouchableOpacity
                 key={notification.id}
-                style={[styles.notificationItem, !notification.is_read && { backgroundColor: '#F0F9FF' }]}
-                activeOpacity={0.7}
+                style={[
+                    styles.notificationItem, 
+                    !notification.is_read && { backgroundColor: '#F0F9FF' },
+                    { zIndex: isMenuOpen ? 1000 : 1 } // Ensure menu appears above next items
+                ]}
+                activeOpacity={0.9}
                 onPress={() => handleNotificationPress(notification)}
               >
                 <View style={styles.leftContainer}>
@@ -318,7 +370,43 @@ export default function NotificationsScreen() {
                   </Text>
                   <Text style={styles.timestamp}>{getTimeAgo(notification.created_at)}</Text>
                 </View>
-                {!notification.is_read && <View style={styles.unreadDot} />}
+
+                {/* Right side actions */}
+                <View style={styles.rightActionsContainer}>
+                  {!notification.is_read && <View style={styles.unreadDot} />}
+                  
+                  <TouchableOpacity 
+                    style={styles.moreButton} 
+                    onPress={(e) => {
+                        e.stopPropagation(); // Prevent item press
+                        toggleMenu(notification.id);
+                    }}
+                    hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+                  >
+                     <Feather name="more-horizontal" size={20} color={COLORS.textTertiary} />
+                  </TouchableOpacity>
+
+                  {/* Minimalist Dropdown Menu */}
+                  {isMenuOpen && (
+                    <View style={styles.inlineMenu}>
+                        <TouchableOpacity 
+                            style={styles.inlineMenuItem} 
+                            onPress={(e) => { e.stopPropagation(); handleTurnOffNotification(); }}
+                        >
+                            <Feather name="bell-off" size={14} color={COLORS.textPrimary} />
+                            <Text style={styles.inlineMenuText}>Turn off</Text>
+                        </TouchableOpacity>
+                        <View style={styles.inlineMenuDivider} />
+                        <TouchableOpacity 
+                            style={styles.inlineMenuItem} 
+                            onPress={(e) => { e.stopPropagation(); handleDeleteNotification(notification.id); }}
+                        >
+                            <Feather name="trash-2" size={14} color="#EF4444" />
+                            <Text style={[styles.inlineMenuText, { color: '#EF4444' }]}>Delete</Text>
+                        </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
               </TouchableOpacity>
             );
           })
@@ -352,12 +440,71 @@ const styles = StyleSheet.create({
   avatarWrapper: { position: 'relative', padding: 4 },
   followBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#DBEAFE', width: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#FFF' },
   notificationIcon: { fontSize: 24 },
-  notificationContent: { flex: 1, paddingRight: 12, justifyContent: 'center', minHeight: 48 },
+  notificationContent: { flex: 1, paddingRight: 8, justifyContent: 'center', minHeight: 48 },
   notificationText: { fontSize: 15, lineHeight: 22, marginBottom: 4, flexWrap: 'wrap' },
   userName: { fontWeight: '700', color: COLORS.textPrimary },
   action: { fontWeight: '400', color: COLORS.textSecondary },
   postTitle: { fontWeight: '500', color: COLORS.textPrimary, fontStyle: 'italic' },
   timestamp: { fontSize: 13, color: COLORS.textTertiary, marginTop: 2 },
-  unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.primary, marginTop: 6 },
-  loadingOverlay: { position: 'absolute', top: 100, left: 0, right: 0, bottom: 0, zIndex: 20, justifyContent: 'flex-start', alignItems: 'center', paddingTop: 50 }
+  
+  // Right Actions & Menu
+  rightActionsContainer: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 8,
+    paddingTop: 4,
+    position: 'relative', // Context for absolute menu
+  },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.primary },
+  moreButton: {
+    padding: 4,
+  },
+  
+  // Minimalist Popup Menu
+  inlineMenu: {
+    position: 'absolute',
+    top: 25, 
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingVertical: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 8,
+    zIndex: 9999,
+    minWidth: 110,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  inlineMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  inlineMenuDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginHorizontal: 8,
+  },
+  inlineMenuText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.textPrimary
+  },
+
+  loadingOverlay: {
+    position: 'absolute',
+    top: 100,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 20,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingTop: 50,
+  }
 });
