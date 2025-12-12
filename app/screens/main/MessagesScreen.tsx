@@ -184,7 +184,13 @@ export default function MessagesScreen() {
         if (content && content.trim().startsWith('{')) {
             const parsed = JSON.parse(content);
             const isMe = senderId === session?.user?.id;
-            if (parsed.type === 'share_post') return isMe ? `You shared a post` : `Shared a post`;
+            
+            if (parsed.type === 'share_post') {
+                if (parsed.postAuthor) {
+                    return isMe ? 'You replied to their post' : 'Replied to your post';
+                }
+                return isMe ? 'You shared a post' : 'Shared a post';
+            }
             if (parsed.type === 'image') return isMe ? 'You sent a photo' : 'Sent a photo';
             if (parsed.type === 'video') return isMe ? 'You sent a video' : 'Sent a video';
             if (parsed.type === 'file') return isMe ? `You sent a file` : `Sent a file`;

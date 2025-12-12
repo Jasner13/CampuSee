@@ -1,7 +1,9 @@
+// app/screens/settings/SettingsScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, StatusBar, TouchableOpacity, Switch, Alert, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { Feather } from '@expo/vector-icons'; // Import Feather icons
 import type { MainTabParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants/colors';
@@ -20,7 +22,7 @@ const DEFAULT_SETTINGS: UserSettings = {
 
 export default function SettingsScreen() {
   const navigation = useNavigation<SettingsScreenNavigationProp>();
-  const { logout, session, refreshProfile } = useAuth(); // Import refreshProfile
+  const { logout, session, refreshProfile } = useAuth();
 
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
@@ -109,12 +111,12 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundLight} />
 
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.7} onPress={handleBack}>
-          <Text style={styles.backIcon}>←</Text>
+          <Feather name="arrow-left" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
 
         <Text style={styles.headerTitle}>Settings</Text>
@@ -142,13 +144,13 @@ export default function SettingsScreen() {
               activeOpacity={0.7}
             >
               <View style={styles.iconContainer}>
-                <Text style={styles.icon}>👤</Text>
+                <Feather name="user" size={20} color={COLORS.primary} />
               </View>
               <View style={styles.settingTextContainer}>
                 <Text style={styles.settingTitle}>Edit Profile</Text>
                 <Text style={styles.settingDescription}>Update your name and photo</Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Feather name="chevron-right" size={20} color={COLORS.textTertiary} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -157,30 +159,30 @@ export default function SettingsScreen() {
               activeOpacity={0.7}
             >
               <View style={styles.iconContainer}>
-                <Text style={styles.icon}>🔒</Text>
+                <Feather name="lock" size={20} color={COLORS.primary} />
               </View>
               <View style={styles.settingTextContainer}>
                 <Text style={styles.settingTitle}>Change Password</Text>
                 <Text style={styles.settingDescription}>Keep your account secure</Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Feather name="chevron-right" size={20} color={COLORS.textTertiary} />
             </TouchableOpacity>
           </View>
 
-          {/* Privacy Section (New) */}
+          {/* Privacy Section */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>PRIVACY</Text>
             
             <View style={styles.settingItem}>
               <View style={styles.iconContainer}>
-                <Text style={styles.icon}>🟢</Text>
+                <Feather name="activity" size={20} color={COLORS.primary} />
               </View>
               <View style={styles.settingTextContainer}>
                 <Text style={styles.settingTitle}>Active Status</Text>
                 <Text style={styles.settingDescription}>Show when you're active</Text>
               </View>
               <Switch
-                value={settings.active_status !== false} // Default true if undefined
+                value={settings.active_status !== false}
                 onValueChange={(val) => toggleSetting('active_status', val)}
                 trackColor={{ false: COLORS.border, true: COLORS.success }}
                 thumbColor={COLORS.backgroundLight}
@@ -194,7 +196,7 @@ export default function SettingsScreen() {
 
             <View style={styles.settingItem}>
               <View style={styles.iconContainer}>
-                <Text style={styles.icon}>💬</Text>
+                <Feather name="message-square" size={20} color={COLORS.primary} />
               </View>
               <View style={styles.settingTextContainer}>
                 <Text style={styles.settingTitle}>Replies to my posts</Text>
@@ -210,7 +212,7 @@ export default function SettingsScreen() {
 
             <View style={styles.settingItem}>
               <View style={styles.iconContainer}>
-                <Text style={styles.icon}>✉️</Text>
+                <Feather name="mail" size={20} color={COLORS.primary} />
               </View>
               <View style={styles.settingTextContainer}>
                 <Text style={styles.settingTitle}>New messages</Text>
@@ -226,7 +228,7 @@ export default function SettingsScreen() {
 
             <View style={styles.settingItem}>
               <View style={styles.iconContainer}>
-                <Text style={styles.icon}>❤️</Text>
+                <Feather name="heart" size={20} color={COLORS.primary} />
               </View>
               <View style={styles.settingTextContainer}>
                 <Text style={styles.settingTitle}>Post interactions</Text>
@@ -251,13 +253,13 @@ export default function SettingsScreen() {
               activeOpacity={0.7}
             >
               <View style={styles.iconContainer}>
-                <Text style={styles.icon}>❓</Text>
+                <Feather name="help-circle" size={20} color={COLORS.primary} />
               </View>
               <View style={styles.settingTextContainer}>
                 <Text style={styles.settingTitle}>Help & Support</Text>
                 <Text style={styles.settingDescription}>FAQs and contact options</Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Feather name="chevron-right" size={20} color={COLORS.textTertiary} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -266,13 +268,13 @@ export default function SettingsScreen() {
               activeOpacity={0.7}
             >
               <View style={styles.iconContainer}>
-                <Text style={styles.icon}>📄</Text>
+                <Feather name="file-text" size={20} color={COLORS.primary} />
               </View>
               <View style={styles.settingTextContainer}>
                 <Text style={styles.settingTitle}>Terms of Service</Text>
                 <Text style={styles.settingDescription}>Read our terms and conditions</Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Feather name="chevron-right" size={20} color={COLORS.textTertiary} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -281,13 +283,13 @@ export default function SettingsScreen() {
               activeOpacity={0.7}
             >
               <View style={styles.iconContainer}>
-                <Text style={styles.icon}>🛡️</Text>
+                <Feather name="shield" size={20} color={COLORS.primary} />
               </View>
               <View style={styles.settingTextContainer}>
                 <Text style={styles.settingTitle}>Privacy Policy</Text>
                 <Text style={styles.settingDescription}>How we protect your data</Text>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Feather name="chevron-right" size={20} color={COLORS.textTertiary} />
             </TouchableOpacity>
           </View>
 
@@ -297,7 +299,9 @@ export default function SettingsScreen() {
             onPress={handleLogOut}
             activeOpacity={0.8}
           >
-            <Text style={styles.logOutIcon}>🚪</Text>
+            <View style={{ marginRight: 8 }}>
+                <Feather name="log-out" size={20} color={COLORS.textLight} />
+            </View>
             <Text style={styles.logOutText}>Log Out</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -328,10 +332,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  backIcon: {
-    fontSize: 24,
-    color: COLORS.textPrimary,
-  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -361,20 +361,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.backgroundLight,
-    paddingVertical: 16,
+    paddingVertical: 12, // Slightly reduced vertical padding for better density
     paddingHorizontal: 16,
     borderRadius: 12,
     marginBottom: 8,
   },
   iconContainer: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EEF2FF', // Sleek light primary background
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
-  },
-  icon: {
-    fontSize: 24,
   },
   settingTextContainer: {
     flex: 1,
@@ -389,11 +388,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.textSecondary,
   },
-  chevron: {
-    fontSize: 24,
-    color: COLORS.textTertiary,
-    marginLeft: 8,
-  },
   logOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -403,10 +397,6 @@ const styles = StyleSheet.create({
     marginTop: 32,
     paddingVertical: 16,
     borderRadius: 12,
-  },
-  logOutIcon: {
-    fontSize: 20,
-    marginRight: 8,
   },
   logOutText: {
     fontSize: 16,
