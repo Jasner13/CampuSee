@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Svg, Circle } from 'react-native-svg';
+import { Feather } from '@expo/vector-icons'; // Import Feather icons
 import { COLORS } from '../../constants/colors';
 import { Avatar } from '../Avatar';
 
@@ -10,9 +11,10 @@ interface MessageCardProps {
   time: string;
   initials: string;
   avatarUrl?: string | null;
-  isOnline?: boolean; // <--- Now passed directly to Avatar
+  isOnline?: boolean;
   isUnread?: boolean;
   onPress?: () => void;
+  onDelete?: () => void; // New prop for delete action
 }
 
 export const MessageCard: React.FC<MessageCardProps> = ({
@@ -24,6 +26,7 @@ export const MessageCard: React.FC<MessageCardProps> = ({
   isOnline = false,
   isUnread = false,
   onPress,
+  onDelete,
 }) => {
   return (
     <TouchableOpacity 
@@ -32,7 +35,6 @@ export const MessageCard: React.FC<MessageCardProps> = ({
       activeOpacity={0.7}
     >
       <View style={styles.content}>
-        {/* Pass isOnline directly to Avatar */}
         <Avatar 
           initials={initials} 
           avatarUrl={avatarUrl} 
@@ -55,13 +57,27 @@ export const MessageCard: React.FC<MessageCardProps> = ({
         </View>
       </View>
       
-      {isUnread && (
-        <View style={styles.unreadBadge}>
-          <Svg width={12} height={12} viewBox="0 0 12 12">
-            <Circle cx="6" cy="6" r="6" fill="#667EEA" />
-          </Svg>
-        </View>
-      )}
+      <View style={styles.rightActions}>
+        {isUnread && (
+          <View style={styles.unreadBadge}>
+            <Svg width={12} height={12} viewBox="0 0 12 12">
+              <Circle cx="6" cy="6" r="6" fill="#667EEA" />
+            </Svg>
+          </View>
+        )}
+        
+        {/* Delete Button */}
+        <TouchableOpacity 
+          onPress={(e) => {
+            e.stopPropagation(); // Prevent triggering the card onPress
+            onDelete && onDelete();
+          }}
+          style={styles.deleteButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Feather name="trash-2" size={20} color={COLORS.lightGray} />
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 };
@@ -72,7 +88,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.backgroundLight,
     paddingVertical: 13,
     paddingLeft: 20,
-    paddingRight: 10,
+    paddingRight: 20, // Increased padding right
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -82,6 +98,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
     flex: 1,
+    marginRight: 10,
   },
   messageContent: {
     flex: 1,
@@ -99,7 +116,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    maxWidth: 264,
   },
   message: {
     color: COLORS.textSecondary,
@@ -116,9 +132,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  rightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12, // Space between unread badge and delete icon
+  },
   unreadBadge: {
     width: 12,
     height: 12,
-    marginRight: 10,
   },
+  deleteButton: {
+    padding: 4,
+  }
 });

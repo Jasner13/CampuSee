@@ -1,7 +1,21 @@
 // app/screens/main/MessagesScreen.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, ActivityIndicator, TextInput, Keyboard } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  FlatList, 
+  TouchableOpacity, 
+  StatusBar, 
+  ActivityIndicator, 
+  TextInput, 
+  Keyboard, 
+  Alert,
+  Modal,
+  TouchableWithoutFeedback
+} from 'react-native';
 import { Svg, Path } from 'react-native-svg';
+import { Feather } from '@expo/vector-icons'; 
 import { useNavigation, useFocusEffect, CompositeNavigationProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -28,6 +42,11 @@ export default function MessagesScreen() {
   const [searchText, setSearchText] = useState('');
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [isSearchingLoading, setIsSearchingLoading] = useState(false);
+
+  // --- Modal State ---
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<{id: string, name: string | null} | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleBack = () => {
     if (isSearching) {
@@ -87,6 +106,42 @@ export default function MessagesScreen() {
     }
   };
 
+  // 1. Trigger Modal
+  const promptDeleteConversation = (peerId: string, peerName: string | null) => {
+    setConversationToDelete({ id: peerId, name: peerName });
+    setDeleteModalVisible(true);
+  };
+
+  // 2. Perform Delete
+  const confirmDeleteConversation = async () => {
+    if (!conversationToDelete || !session?.user) return;
+    
+    setIsDeleting(true);
+    const { id: peerId } = conversationToDelete;
+
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .delete()
+        .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${peerId}),and(sender_id.eq.${peerId},receiver_id.eq.${session.user.id})`);
+        
+      if (error) throw error;
+
+      // Optimistic update
+      setConversations(prev => prev.filter(c => c.peer_id !== peerId));
+      
+      // Close modal
+      setDeleteModalVisible(false);
+      setConversationToDelete(null);
+
+    } catch (err) {
+      console.error("Error deleting conversation:", err);
+      Alert.alert("Error", "Could not delete conversation.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const openChat = (id: string, name: string | null, avatarUrl: string | null) => {
     const peerName = name || 'Unknown User';
     const peerInitials = peerName.substring(0, 2).toUpperCase();
@@ -123,29 +178,15 @@ export default function MessagesScreen() {
     return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   };
 
-  // --- UPDATED PREVIEW FUNCTION ---
   const getMessagePreview = (content: string, senderId: string) => {
     try {
         if (content && content.trim().startsWith('{')) {
             const parsed = JSON.parse(content);
             const isMe = senderId === session?.user?.id;
-
-            if (parsed.type === 'share_post') {
-                const postTitle = parsed.title || 'a post';
-                return isMe ? `You shared a post: "${postTitle}"` : `Shared a post: "${postTitle}"`;
-            }
-
-            if (parsed.type === 'image') {
-                return isMe ? 'You sent a photo' : 'Sent a photo';
-            }
-
-            if (parsed.type === 'video') {
-                return isMe ? 'You sent a video' : 'Sent a video';
-            }
-
-            if (parsed.type === 'file') {
-                return isMe ? `You sent a file` : `Sent a file`;
-            }
+            if (parsed.type === 'share_post') return isMe ? `You shared a post` : `Shared a post`;
+            if (parsed.type === 'image') return isMe ? 'You sent a photo' : 'Sent a photo';
+            if (parsed.type === 'video') return isMe ? 'You sent a video' : 'Sent a video';
+            if (parsed.type === 'file') return isMe ? `You sent a file` : `Sent a file`;
         }
     } catch (e) {}
     return content;
@@ -181,43 +222,38 @@ export default function MessagesScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Main Content */}
       {isSearching ? (
         <View style={styles.messageList}>
-          {isSearchingLoading ? (
+            {isSearchingLoading ? (
             <ActivityIndicator style={{ marginTop: 20 }} color={COLORS.primary} />
-          ) : (
+            ) : (
             <FlatList
-              data={searchResults}
-              keyExtractor={item => item.id}
-              contentContainerStyle={{ padding: 20 }}
-              renderItem={({ item }) => (
+                data={searchResults}
+                keyExtractor={item => item.id}
+                contentContainerStyle={{ padding: 20 }}
+                renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.userSearchCard}
-                  onPress={() => openChat(item.id, item.full_name, item.avatar_url)}
+                    style={styles.userSearchCard}
+                    onPress={() => openChat(item.id, item.full_name, item.avatar_url)}
                 >
-                  <View style={styles.searchAvatarContainer}>
+                    <View style={styles.searchAvatarContainer}>
                     <Avatar 
-                      initials={getInitials(item.full_name)}
-                      avatarUrl={item.avatar_url}
-                      size="small"
-                      isOnline={onlineUsers.has(item.id)}
+                        initials={getInitials(item.full_name)}
+                        avatarUrl={item.avatar_url}
+                        size="small"
+                        isOnline={onlineUsers.has(item.id)}
                     />
-                  </View>
-                  <View>
+                    </View>
+                    <View>
                     <Text style={styles.searchName}>{item.full_name || 'No Name'}</Text>
                     <Text style={styles.searchProgram}>{item.program || 'Student'}</Text>
-                  </View>
+                    </View>
                 </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                searchText.length > 0 ? (
-                  <Text style={{ textAlign: 'center', marginTop: 20, color: COLORS.textTertiary }}>No user found.</Text>
-                ) : (
-                  <Text style={{ textAlign: 'center', marginTop: 20, color: COLORS.textTertiary }}>Type to search...</Text>
-                )
-              }
+                )}
+                ListEmptyComponent={ <Text style={{ textAlign: 'center', marginTop: 20, color: COLORS.textTertiary }}>{searchText.length > 0 ? "No user found." : "Type to search..."}</Text> }
             />
-          )}
+            )}
         </View>
       ) : (
         loading ? (
@@ -244,6 +280,7 @@ export default function MessagesScreen() {
                   isOnline={isUserOnline}
                   isUnread={isUnread}
                   onPress={() => openChat(item.peer_id, item.peer_name, item.peer_avatar)}
+                  onDelete={() => promptDeleteConversation(item.peer_id, item.peer_name)}
                 />
               );
             }}
@@ -259,6 +296,55 @@ export default function MessagesScreen() {
           />
         )
       )}
+
+      {/* --- Delete Confirmation Modal --- */}
+      <Modal
+        visible={deleteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setDeleteModalVisible(false)}>
+            <View style={styles.modalOverlay}>
+                <TouchableWithoutFeedback>
+                    <View style={styles.modalContent}>
+                        <View style={styles.iconWrapper}>
+                            <Feather name="trash-2" size={24} color="#EF4444" />
+                        </View>
+                        
+                        <Text style={styles.modalTitle}>Delete Conversation</Text>
+                        
+                        <Text style={styles.modalDescription}>
+                            Are you sure you want to delete your chat with <Text style={styles.boldText}>{conversationToDelete?.name || 'this user'}</Text>?
+                        </Text>
+                        
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity 
+                                style={[styles.modalButton, styles.cancelButton]}
+                                onPress={() => setDeleteModalVisible(false)}
+                                disabled={isDeleting}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity 
+                                style={[styles.modalButton, styles.deleteButton]}
+                                onPress={confirmDeleteConversation}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? (
+                                    <ActivityIndicator size="small" color="#FFF" />
+                                ) : (
+                                    <Text style={styles.deleteButtonText}>Delete</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
     </View>
   );
 }
@@ -279,5 +365,82 @@ const styles = StyleSheet.create({
   userSearchCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.backgroundLight, padding: 12, borderRadius: 12, marginBottom: 10, shadowColor: '#000', shadowOpacity: 0.05, shadowOffset: { width: 0, height: 2 }, shadowRadius: 4, elevation: 2 },
   searchAvatarContainer: { marginRight: 12 },
   searchName: { fontSize: 16, fontWeight: '700', color: COLORS.textPrimary },
-  searchProgram: { fontSize: 12, color: COLORS.textSecondary }
+  searchProgram: { fontSize: 12, color: COLORS.textSecondary },
+
+  // --- Modal Styles ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20, // Reduced radius for compactness
+    padding: 20,      // Reduced padding
+    width: '100%',
+    maxWidth: 300,    // Reduced max width
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  iconWrapper: {
+    width: 48,        // Smaller icon bg
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FEF2F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12, // Reduced spacing
+  },
+  modalTitle: {
+    fontSize: 18,     // Smaller title
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalDescription: {
+    fontSize: 14,     // Smaller description text
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20, // Reduced spacing
+    lineHeight: 20,
+  },
+  boldText: {
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  modalButton: {
+    flex: 1,
+    height: 44,       // Shorter buttons
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#F1F5F9',
+  },
+  deleteButton: {
+    backgroundColor: '#EF4444',
+  },
+  cancelButtonText: {
+    fontSize: 14,     // Adjusted font size
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  deleteButtonText: {
+    fontSize: 14,     
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
 });
