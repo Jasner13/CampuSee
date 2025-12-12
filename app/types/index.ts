@@ -36,6 +36,7 @@ export interface Notification {
     title: string | null;
     content: string | null;
     is_read: boolean;
+    resource_id?: string | null; // Added resource_id
     actor?: {
         full_name: string | null;
         avatar_url: string | null;

@@ -1,4 +1,3 @@
-// app/components/BottomNav.tsx
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,16 +11,16 @@ import { supabase } from '../lib/supabase';
 export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }) => {
   const { session } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
   
   // Helper to determine if a route is focused
   const isFocused = (index: number) => state.index === index;
 
-  // Fetch count of unique users who sent unread messages and subscribe to changes
+  // 1. Fetch Unread Messages Count
   useEffect(() => {
     if (!session?.user) return;
 
-    const fetchUnread = async () => {
-      // Query to get distinct sender_ids for unread messages
+    const fetchUnreadMessages = async () => {
       const { data, error } = await supabase
         .from('messages')
         .select('sender_id')
@@ -29,27 +28,64 @@ export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, nav
         .eq('is_read', false);
       
       if (!error && data) {
-        // Count unique sender_ids using a Set
         const uniqueSenders = new Set(data.map(msg => msg.sender_id));
         setUnreadCount(uniqueSenders.size);
       }
     };
 
-    fetchUnread();
+    fetchUnreadMessages();
 
-    // Subscribe to realtime changes for the messages table
     const channel = supabase
-      .channel('bottom_nav_unread_count')
+      .channel('bottom_nav_messages_count')
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen for INSERT (new msg) and UPDATE (marked as read)
+          event: '*',
           schema: 'public',
           table: 'messages',
           filter: `receiver_id=eq.${session.user.id}`,
         },
         () => {
-          fetchUnread();
+          fetchUnreadMessages();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user]);
+
+  // 2. Fetch Unread Notifications Count
+  useEffect(() => {
+    if (!session?.user) return;
+
+    const fetchUnreadNotifications = async () => {
+      const { count, error } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true }) // head: true means we only want the count, not data
+        .eq('user_id', session.user.id)
+        .eq('is_read', false);
+
+      if (!error && count !== null) {
+        setNotificationCount(count);
+      }
+    };
+
+    fetchUnreadNotifications();
+
+    const channel = supabase
+      .channel('bottom_nav_notifications_count')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${session.user.id}`,
+        },
+        () => {
+          fetchUnreadNotifications();
         }
       )
       .subscribe();
@@ -78,7 +114,7 @@ export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, nav
 
       {/* --- LEFT GROUP (Home + Messages) --- */}
       
-      {/* 1. HOME TAB (Index 0 based on MainNavigator) */}
+      {/* 1. HOME TAB (Index 0) */}
       <TouchableOpacity 
         style={styles.navItem} 
         onPress={() => handlePress(0, 'Home')} 
@@ -113,7 +149,6 @@ export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, nav
         onPress={() => handlePress(1, 'Messages')} 
         activeOpacity={0.7}
       >
-        {/* We wrap the icon in a view to position the badge relative to it */}
         <View>
           {isFocused(1) ? (
             <Svg width="36" height="36" viewBox="0 0 36 36" fill="none">
@@ -131,7 +166,7 @@ export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, nav
             </Svg>
           )}
 
-          {/* Unread Count Badge */}
+          {/* Unread Message Badge */}
           {unreadCount > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>
@@ -140,14 +175,13 @@ export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, nav
             </View>
           )}
         </View>
-        
         <Text style={isFocused(1) ? styles.selectedText : styles.unselectedText}>Messages</Text>
       </TouchableOpacity>
 
       {/* --- MIDDLE SPACER --- */}
       <View style={styles.spacer} />
 
-      {/* 3. CENTER CREATE BUTTON (Index 2 - CreatePost) */}
+      {/* 3. CENTER CREATE BUTTON (Index 2) */}
       <TouchableOpacity 
         style={styles.createButton} 
         onPress={() => handlePress(2, 'CreatePost')} 
@@ -171,8 +205,8 @@ export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, nav
         onPress={() => handlePress(3, 'Notifications')} 
         activeOpacity={0.7}
       >
-        {isFocused(3) ? (
-          <>
+        <View>
+          {isFocused(3) ? (
             <Svg width="36" height="36" viewBox="0 0 36 36" fill="none">
               <Path d="M13.5 25.5V27C13.5 28.1935 13.9741 29.3381 14.818 30.182C15.6619 31.0259 16.8065 31.5 18 31.5C19.1935 31.5 20.3381 31.0259 21.182 30.182C22.0259 29.3381 22.5 28.1935 22.5 27V25.5M15 7.5C15 6.70435 15.3161 5.94129 15.8787 5.37868C16.4413 4.81607 17.2044 4.5 18 4.5C18.7956 4.5 19.5587 4.81607 20.1213 5.37868C20.6839 5.94129 21 6.70435 21 7.5C22.7226 8.31454 24.1911 9.58249 25.2481 11.1679C26.305 12.7534 26.9107 14.5966 27 16.5V21C27.1129 21.9326 27.4432 22.8256 27.9642 23.6072C28.4853 24.3888 29.1826 25.0371 30 25.5H6C6.81741 25.0371 7.51471 24.3888 8.03578 23.6072C8.55685 22.8256 8.88712 21.9326 9 21V16.5C9.08934 14.5966 9.69495 12.7534 10.7519 11.1679C11.8089 9.58249 13.2774 8.31454 15 7.5Z" stroke="url(#notif_gradient)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
               <Defs>
@@ -182,16 +216,22 @@ export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, nav
                 </SvgLinearGradient>
               </Defs>
             </Svg>
-            <Text style={styles.selectedText}>Notifications</Text>
-          </>
-        ) : (
-          <>
+          ) : (
             <Svg width="36" height="36" viewBox="0 0 36 36" fill="none">
               <Path d="M13.5 25.5V27C13.5 28.1935 13.9741 29.3381 14.818 30.182C15.6619 31.0259 16.8065 31.5 18 31.5C19.1935 31.5 20.3381 31.0259 21.182 30.182C22.0259 29.3381 22.5 28.1935 22.5 27V25.5M15 7.5C15 6.70435 15.3161 5.94129 15.8787 5.37868C16.4413 4.81607 17.2044 4.5 18 4.5C18.7956 4.5 19.5587 4.81607 20.1213 5.37868C20.6839 5.94129 21 6.70435 21 7.5C22.7226 8.31454 24.1911 9.58249 25.2481 11.1679C26.305 12.7534 26.9107 14.5966 27 16.5V21C27.1129 21.9326 27.4432 22.8256 27.9642 23.6072C28.4853 24.3888 29.1826 25.0371 30 25.5H6C6.81741 25.0371 7.51471 24.3888 8.03578 23.6072C8.55685 22.8256 8.88712 21.9326 9 21V16.5C9.08934 14.5966 9.69495 12.7534 10.7519 11.1679C11.8089 9.58249 13.2774 8.31454 15 7.5Z" stroke={COLORS.textTertiary} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
             </Svg>
-            <Text style={styles.unselectedText}>Notifications</Text>
-          </>
-        )}
+          )}
+
+          {/* Unread Notification Badge */}
+          {notificationCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {notificationCount > 9 ? '9+' : notificationCount}
+              </Text>
+            </View>
+          )}
+        </View>
+        <Text style={isFocused(3) ? styles.selectedText : styles.unselectedText}>Notifications</Text>
       </TouchableOpacity>
 
       {/* 5. PROFILE TAB (Index 4) */}
