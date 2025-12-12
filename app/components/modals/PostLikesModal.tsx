@@ -1,3 +1,4 @@
+// app/components/modals/PostLikesModal.tsx
 import React, { useEffect, useState } from 'react';
 import { 
   View, 
@@ -7,7 +8,7 @@ import {
   TouchableOpacity, 
   FlatList, 
   ActivityIndicator,
-  Image 
+  Pressable
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
@@ -37,7 +38,7 @@ export const PostLikesModal: React.FC<PostLikesModalProps> = ({ visible, onClose
     if (visible && postId) {
       fetchLikers();
     } else {
-      setLikers([]); // Reset on close
+      setLikers([]);
     }
   }, [visible, postId]);
 
@@ -45,7 +46,6 @@ export const PostLikesModal: React.FC<PostLikesModalProps> = ({ visible, onClose
     if (!postId) return;
     setLoading(true);
     try {
-      // Fetch users from post_likes table joined with profiles
       const { data, error } = await supabase
         .from('post_likes')
         .select(`
@@ -62,7 +62,6 @@ export const PostLikesModal: React.FC<PostLikesModalProps> = ({ visible, onClose
       if (error) throw error;
 
       if (data) {
-        // Map the nested data structure to a flat array
         const formattedData = data.map((item: any) => ({
             id: item.profiles.id,
             full_name: item.profiles.full_name,
@@ -82,9 +81,10 @@ export const PostLikesModal: React.FC<PostLikesModalProps> = ({ visible, onClose
     <TouchableOpacity 
       style={styles.userItem} 
       onPress={() => {
-        onClose(); // Close likes modal
-        onUserPress && onUserPress(item.id); // Open profile modal
+        onClose();
+        onUserPress && onUserPress(item.id);
       }}
+      activeOpacity={0.7}
     >
       <View style={styles.avatarContainer}>
          <Avatar 
@@ -97,24 +97,33 @@ export const PostLikesModal: React.FC<PostLikesModalProps> = ({ visible, onClose
         <Text style={styles.userName}>{item.full_name}</Text>
         <Text style={styles.userProgram}>{item.program || 'Student'}</Text>
       </View>
+      <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
     </TouchableOpacity>
   );
 
   return (
     <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.modalContainer}>
+      <Pressable style={styles.overlay} onPress={onClose}>
+        <Pressable style={styles.modalContainer} onPress={(e) => e.stopPropagation()}>
+          
+          {/* Handle Bar for visual affordance */}
+          <View style={styles.handleBarContainer}>
+            <View style={styles.handleBar} />
+          </View>
+
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Likes</Text>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Ionicons name="close" size={24} color={COLORS.textPrimary} />
+              <Ionicons name="close" size={20} color={COLORS.textSecondary} />
             </TouchableOpacity>
           </View>
           
           <View style={styles.divider} />
 
           {loading ? (
-            <ActivityIndicator size="large" color={COLORS.primary} style={styles.loader} />
+            <View style={styles.loaderContainer}>
+              <ActivityIndicator size="large" color={COLORS.primary} />
+            </View>
           ) : (
             <FlatList
               data={likers}
@@ -122,12 +131,15 @@ export const PostLikesModal: React.FC<PostLikesModalProps> = ({ visible, onClose
               renderItem={renderItem}
               contentContainerStyle={styles.listContent}
               ListEmptyComponent={
-                <Text style={styles.emptyText}>No likes yet.</Text>
+                <View style={styles.emptyContainer}>
+                    <Ionicons name="heart-outline" size={48} color={COLORS.faintGray} />
+                    <Text style={styles.emptyText}>No likes yet. Be the first!</Text>
+                </View>
               }
             />
           )}
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 };
@@ -136,70 +148,94 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   modalContainer: {
-    width: '85%',
-    maxHeight: '70%',
-    backgroundColor: 'white',
-    borderRadius: 24,
-    overflow: 'hidden',
+    backgroundColor: COLORS.backgroundLight,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '70%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  handleBarContainer: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  handleBar: {
+    width: 40,
+    height: 4,
+    backgroundColor: COLORS.border,
+    borderRadius: 2,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    paddingBottom: 15,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: COLORS.textPrimary,
+    fontFamily: FONTS.bold,
   },
   closeButton: {
-    padding: 4,
-    backgroundColor: COLORS.backgroundLight,
-    borderRadius: 50,
+    padding: 8,
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
   },
   divider: {
     height: 1,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: COLORS.border,
     width: '100%',
   },
-  loader: {
-    padding: 40,
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   listContent: {
-    padding: 16,
+    padding: 20,
   },
   userItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: COLORS.background,
   },
   avatarContainer: {
-    marginRight: 12,
+    marginRight: 16,
   },
   userInfo: {
     flex: 1,
   },
   userName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     color: COLORS.textPrimary,
+    fontFamily: FONTS.bold,
   },
   userProgram: {
-    fontSize: 13,
-    color: COLORS.textTertiary,
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontFamily: FONTS.regular,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 60,
   },
   emptyText: {
     textAlign: 'center',
     color: COLORS.textTertiary,
-    marginTop: 20,
-    marginBottom: 20,
+    marginTop: 12,
+    fontSize: 16,
+    fontFamily: FONTS.regular,
   }
 });

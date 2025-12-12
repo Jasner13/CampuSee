@@ -1,10 +1,12 @@
+// app/components/modals/UserProfileModal.tsx
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, ActivityIndicator, Alert, FlatList } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, ActivityIndicator, Alert, FlatList, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { COLORS } from '../../constants/colors';
+import { FONTS } from '../../constants/fonts';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -23,7 +25,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const [isFollowing, setIsFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   
-  // Stats State
   const [stats, setStats] = useState({ posts: 0, followers: 0, following: 0 });
   const [userPosts, setUserPosts] = useState<any[]>([]);
 
@@ -36,7 +37,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   const fetchProfileData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -46,7 +46,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
       if (profileError) throw profileError;
       setProfile(profileData);
 
-      // 2. Check Follow Status
       if (session?.user) {
         const { count } = await supabase
           .from('follows')
@@ -57,7 +56,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         setIsFollowing(count ? count > 0 : false);
       }
 
-      // 3. Fetch Stats & Posts (Parallel)
       const [postsCount, followersCount, followingCount, postsData] = await Promise.all([
           supabase.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', userId),
           supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
@@ -88,7 +86,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
     
     try {
       if (isFollowing) {
-        // Unfollow
         const { error } = await supabase
           .from('follows')
           .delete()
@@ -98,7 +95,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         setIsFollowing(false);
         setStats(prev => ({ ...prev, followers: prev.followers - 1 }));
       } else {
-        // Follow
         const { error } = await supabase
           .from('follows')
           .insert({
@@ -109,7 +105,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
         setIsFollowing(true);
         setStats(prev => ({ ...prev, followers: prev.followers + 1 }));
         
-        // Notification
         await supabase.from('notifications').insert({
             user_id: userId,
             actor_id: session.user.id,
@@ -126,7 +121,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
   };
 
   const handlePostPress = (post: any) => {
-      onClose(); // Close modal first
+      onClose();
       
       const formattedPost = {
           id: post.id,
@@ -149,22 +144,22 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
       navigation.navigate('PostDetails', { post: formattedPost });
   };
 
-  // Render Item for FlatList (User's Posts)
   const renderPostItem = ({ item }: { item: any }) => (
-      <TouchableOpacity style={styles.postItem} onPress={() => handlePostPress(item)} activeOpacity={0.7}>
+      <TouchableOpacity style={styles.postItem} onPress={() => handlePostPress(item)} activeOpacity={0.8}>
           <View style={styles.postHeader}>
              <Text style={styles.postTitle} numberOfLines={1}>{item.title}</Text>
              <Text style={styles.postDate}>{new Date(item.created_at).toLocaleDateString()}</Text>
           </View>
           <Text style={styles.postBody} numberOfLines={2}>{item.description}</Text>
           <View style={styles.postFooter}>
-              <Text style={styles.postCategory}>{item.category}</Text>
+              <View style={styles.categoryBadge}>
+                <Text style={styles.postCategory}>{item.category}</Text>
+              </View>
               {item.file_url && <Ionicons name="attach" size={16} color={COLORS.textTertiary} />}
           </View>
       </TouchableOpacity>
   );
 
-  // Header Component (Profile Info + Stats)
   const renderHeader = () => (
     <>
         <View style={styles.profileHeader}>
@@ -174,9 +169,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
             />
             <Text style={styles.name}>{profile.full_name}</Text>
             <Text style={styles.program}>{profile.program || 'Student'}</Text>
-            <Text style={styles.bio}>{profile.bio || 'No bio available.'}</Text>
+            
+            {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
 
-            {/* Stats Row */}
             <View style={styles.statsRow}>
                 <View style={styles.statItem}>
                     <Text style={styles.statNumber}>{stats.posts}</Text>
@@ -213,12 +208,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
     </>
   );
 
-  if (!visible) return null;
-
   return (
     <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.modalContainer}>
+      <Pressable style={styles.overlay} onPress={onClose}>
+        <Pressable style={styles.modalContainer} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.handleBarContainer}>
+            <View style={styles.handleBar} />
+          </View>
+          
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
              <Ionicons name="close" size={24} color={COLORS.textPrimary} />
           </TouchableOpacity>
@@ -234,14 +231,16 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ visible, onC
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.listContent}
                 ListEmptyComponent={
-                    <Text style={styles.emptyText}>No posts yet.</Text>
+                    <View style={styles.emptyContainer}>
+                        <Text style={styles.emptyText}>No posts yet.</Text>
+                    </View>
                 }
             />
           ) : (
-            <Text style={{ marginTop: 40 }}>User not found</Text>
+            <Text style={{ marginTop: 40, textAlign: 'center' }}>User not found</Text>
           )}
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 };
@@ -250,27 +249,38 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   modalContainer: {
-    width: '90%',
-    height: '80%',
-    backgroundColor: 'white',
-    borderRadius: 24,
+    width: '100%',
+    height: '85%',
+    backgroundColor: COLORS.backgroundLight,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     overflow: 'hidden',
   },
+  handleBarContainer: {
+      alignItems: 'center',
+      paddingTop: 12,
+      paddingBottom: 8,
+  },
+  handleBar: {
+      width: 40,
+      height: 4,
+      backgroundColor: COLORS.border,
+      borderRadius: 2,
+  },
   listContent: {
-      paddingBottom: 20,
+      paddingBottom: 40,
   },
   closeButton: {
     position: 'absolute',
     top: 16,
     right: 16,
     zIndex: 10,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    borderRadius: 12,
-    padding: 4,
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    padding: 6,
   },
   profileHeader: {
       alignItems: 'center',
@@ -282,16 +292,20 @@ const styles = StyleSheet.create({
     height: 90,
     borderRadius: 45,
     marginBottom: 16,
+    borderWidth: 3,
+    borderColor: COLORS.background,
   },
   name: {
     fontSize: 22,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: COLORS.textPrimary,
+    fontFamily: FONTS.bold,
     marginBottom: 4,
   },
   program: {
     fontSize: 14,
     color: COLORS.textSecondary,
+    fontFamily: FONTS.regular,
     marginBottom: 12,
   },
   bio: {
@@ -299,28 +313,31 @@ const styles = StyleSheet.create({
     color: COLORS.textTertiary,
     textAlign: 'center',
     marginBottom: 20,
-    paddingHorizontal: 10,
+    paddingHorizontal: 20,
+    lineHeight: 20,
   },
-  // Stats Styles
   statsRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 24,
       width: '100%',
+      backgroundColor: COLORS.background,
+      paddingVertical: 12,
+      borderRadius: 16,
   },
   statItem: {
       alignItems: 'center',
-      paddingHorizontal: 16,
+      paddingHorizontal: 20,
   },
   statDivider: {
       width: 1,
       height: 24,
-      backgroundColor: '#E0E0E0',
+      backgroundColor: COLORS.border,
   },
   statNumber: {
       fontSize: 18,
-      fontWeight: 'bold',
+      fontWeight: '700',
       color: COLORS.textPrimary,
   },
   statLabel: {
@@ -330,48 +347,62 @@ const styles = StyleSheet.create({
   },
   followButton: {
     backgroundColor: COLORS.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 40,
-    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 48,
+    borderRadius: 24,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   followingButton: {
     backgroundColor: COLORS.backgroundLight,
     borderWidth: 1,
     borderColor: COLORS.primary,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   followButtonText: {
     color: 'white',
     fontWeight: '600',
+    fontSize: 15,
   },
   followingButtonText: {
     color: COLORS.primary,
   },
-  // Post List Styles
   postsListHeader: {
       paddingHorizontal: 20,
-      marginBottom: 10,
+      marginBottom: 12,
+      marginTop: 8,
   },
   postsListTitle: {
-      fontSize: 16,
+      fontSize: 18,
       fontWeight: '700',
       color: COLORS.textPrimary,
+      fontFamily: FONTS.bold,
   },
   postItem: {
-      backgroundColor: '#F9FAFB',
+      backgroundColor: COLORS.backgroundLight,
       marginHorizontal: 20,
-      marginBottom: 12,
+      marginBottom: 16,
       padding: 16,
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: '#F0F0F0',
+      borderColor: COLORS.border,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.03,
+      shadowRadius: 4,
+      elevation: 2,
   },
   postHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginBottom: 6,
+      marginBottom: 8,
   },
   postTitle: {
-      fontSize: 15,
+      fontSize: 16,
       fontWeight: '600',
       color: COLORS.textPrimary,
       flex: 1,
@@ -382,28 +413,35 @@ const styles = StyleSheet.create({
       color: COLORS.textTertiary,
   },
   postBody: {
-      fontSize: 13,
+      fontSize: 14,
       color: COLORS.textSecondary,
-      marginBottom: 8,
-      lineHeight: 18,
+      marginBottom: 12,
+      lineHeight: 20,
   },
   postFooter: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
   },
+  categoryBadge: {
+      backgroundColor: '#EEF2FF',
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 6,
+  },
   postCategory: {
       fontSize: 11,
       color: COLORS.primary,
-      fontWeight: '500',
-      backgroundColor: 'rgba(92, 107, 192, 0.1)',
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      borderRadius: 4,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+  },
+  emptyContainer: {
+      padding: 20,
+      alignItems: 'center',
   },
   emptyText: {
       textAlign: 'center',
       color: COLORS.textTertiary,
-      marginTop: 20,
+      fontFamily: FONTS.regular,
   }
 });
