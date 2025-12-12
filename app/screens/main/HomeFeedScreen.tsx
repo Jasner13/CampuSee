@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
   feedContent: {
     padding: 18,
     gap: 8,
-    paddingBottom: 100,
+    paddingBottom: 50,
   },
   emptyState: {
     alignItems: 'center',

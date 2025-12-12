@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
   },
   messageListContent: {
     backgroundColor: COLORS.background,
-    paddingBottom: 50
+    paddingBottom: 30
   },
   separator: {
     height: 2,

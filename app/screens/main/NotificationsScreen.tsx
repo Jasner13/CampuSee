@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.backgroundLight,
   },
   notificationsContent: {
-    paddingBottom: 100,
+    paddingBottom: 30,
   },
   notificationItem: {
     flexDirection: 'row',

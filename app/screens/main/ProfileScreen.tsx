@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 100,
+    paddingBottom: 30,
   },
   profileSection: {
     backgroundColor: COLORS.backgroundLight,
