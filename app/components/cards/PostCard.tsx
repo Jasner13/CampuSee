@@ -42,9 +42,10 @@ interface PostCardProps {
   onPress?: () => void;
   onProfilePress?: (userId: string) => void;
   onSharePress?: (post: Post) => void;
+  onLikesPress?: (post: Post) => void; // <--- ADDED THIS PROP
 }
 
-export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePress, onSharePress }) => {
+export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePress, onSharePress, onLikesPress }) => {
   const { session } = useAuth();
   const currentUserId = session?.user?.id;
   
@@ -144,7 +145,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
           <Text style={styles.description} numberOfLines={3}>{post.description}</Text>
         </View>
 
-        {/* --- UPDATED MEDIA SECTION --- */}
+        {/* --- MEDIA SECTION --- */}
         {post.fileUrl && (
           <View style={styles.mediaContainer}>
             {isImage ? (
@@ -181,9 +182,15 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
         
         <View style={styles.statsRow}>
             <View style={styles.statsLeft}>
-                {likesCount > 0 && (
-                    <Text style={styles.statsText}>{likesCount} Likes</Text>
-                )}
+                {/* WRAPPED IN TOUCHABLE OPACITY FOR LIKES MODAL */}
+                <TouchableOpacity 
+                  onPress={() => onLikesPress && likesCount > 0 && onLikesPress(post)}
+                  disabled={likesCount === 0}
+                >
+                  {likesCount > 0 && (
+                      <Text style={styles.statsText}>{likesCount} {likesCount === 1 ? 'Like' : 'Likes'}</Text>
+                  )}
+                </TouchableOpacity>
             </View>
             <View style={styles.statsRight}>
                 {post.commentsCount !== undefined && post.commentsCount > 0 && (
@@ -220,7 +227,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
 };
 
 const styles = StyleSheet.create({
-  cardContainer: { marginBottom: 16, zIndex: 10 },
+  cardContainer: { zIndex: 10 }, // REMOVED marginBottom
   cardInner: {
     backgroundColor: COLORS.backgroundLight,
     borderRadius: 24,
@@ -275,7 +282,7 @@ const styles = StyleSheet.create({
   attachmentText: {
     fontSize: 14,
     fontWeight: '600',
-    color: COLORS.textPrimary, // Darker text for readability
+    color: COLORS.textPrimary, 
   },
   attachmentSubText: {
     fontSize: 12,
