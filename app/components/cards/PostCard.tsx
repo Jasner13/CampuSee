@@ -7,7 +7,8 @@ import {
   Vibration,
   Platform,
   Image,
-  Dimensions
+  Dimensions,
+  Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av'; 
@@ -87,6 +88,24 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
   const handleLike = async () => {
     if (!currentUserId) return;
     
+    // SETTING CHECK: Post Interactions
+    // Check if the author allows interactions
+    try {
+      const { data: authorProfile } = await supabase
+        .from('profiles')
+        .select('settings')
+        .eq('id', post.userId)
+        .single();
+      
+      // If settings exist and post_interactions is explicitly false
+      if (authorProfile?.settings?.post_interactions === false) {
+         // Silently return (do nothing) without alerting
+         return;
+      }
+    } catch (err) {
+      console.log('Error fetching author settings', err);
+    }
+
     const previousState = isLiked;
     const previousCount = likesCount;
     
@@ -106,7 +125,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onPress, onProfilePres
                 type: 'like',
                 title: 'New Like',
                 content: 'liked your post.',
-                resource_id: post.id, // Added resource_id here to link to the post
+                resource_id: post.id, 
                 is_read: false
             });
       }
