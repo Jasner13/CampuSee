@@ -17,7 +17,7 @@ import type { AuthStackParamList } from '../../navigation/types';
 import Svg, { Path } from 'react-native-svg';
 import { useAuth } from '../../contexts/AuthContext';
 import { COLORS } from '../../constants/colors';
-import { Ionicons } from '@expo/vector-icons'; // Import Ionicons
+import { Ionicons } from '@expo/vector-icons';
 
 const { height, width } = Dimensions.get('window');
 const DESIGN_HEIGHT = 896;
@@ -75,10 +75,9 @@ export default function SignUpScreen() {
   const passwordChecks = validatePassword(password);
 
   const validateEmail = (email: string) => {
-    // Allows CIT institutional email OR any Gmail address
+    // Allows ONLY CIT institutional email: firstname.lastname@cit.edu
     const citRegex = /^[a-zA-Z0-9]+\.[a-zA-Z0-9]+@cit\.edu$/;
-    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
-    return citRegex.test(email) || gmailRegex.test(email);
+    return citRegex.test(email);
   };
 
   const handleCreateAccount = async () => {
@@ -90,7 +89,7 @@ export default function SignUpScreen() {
     }
 
     if (!validateEmail(email)) {
-      setMessage('Please use a valid CIT email (firstname.lastname@cit.edu) or a Gmail account.');
+      setMessage('Please use a valid CIT email (firstname.lastname@cit.edu).');
       return;
     }
 
@@ -105,6 +104,7 @@ export default function SignUpScreen() {
     setLoading(false);
 
     if (error) {
+      // Unify error handling
       setMessage(error.message);
     } else {
       navigation.navigate('CodeVerification', { email });
@@ -135,8 +135,18 @@ export default function SignUpScreen() {
             <Text style={styles.subheaderText}>Your Student Status</Text>
           </View>
 
+          {/* Top Error Display (System Log Style) */}
+          <View style={styles.errorContainerWrapper}>
+            {message ? (
+                <View style={styles.errorContainer}>
+                    <Ionicons name="alert-circle" size={20} color="#FF4136" />
+                    <Text style={styles.messageText}>{message}</Text>
+                </View>
+            ) : null}
+          </View>
+
           {/* Email */}
-          <View style={[styles.fieldContainer, { marginTop: scaleY(40) }]}>
+          <View style={[styles.fieldContainer, { marginTop: message ? scaleY(16) : scaleY(40) }]}>
             <Text style={styles.fieldLabel}>University Email</Text>
             <View style={styles.textFieldContainer}>
               <View style={styles.fieldContent}>
@@ -186,7 +196,7 @@ export default function SignUpScreen() {
                   <Ionicons 
                     name={showPassword ? "eye-off" : "eye"} 
                     size={22} 
-                    color={COLORS.textSecondary} // Using textSecondary for the icon color
+                    color={COLORS.textSecondary} 
                   />
                 </TouchableOpacity>
               </View>
@@ -215,10 +225,6 @@ export default function SignUpScreen() {
             </View>
           </View>
 
-          {message ? (
-            <Text style={[styles.messageText, { marginTop: scaleY(10), paddingHorizontal: scaleX(45) }]}>{message}</Text>
-          ) : null}
-
           <View style={[styles.buttonContainer, { marginTop: scaleY(20) }]}>
             <PrimaryButton onPress={handleCreateAccount} disabled={loading} style={{ width: '100%' }}>
               <Text style={primaryButtonStyles.buttonText}>{loading ? 'Creating...' : 'Create Account'}</Text>
@@ -244,12 +250,14 @@ const styles = StyleSheet.create({
   headerText: { color: '#FFFFFF', textAlign: 'center', fontSize: scaleY(32), fontWeight: '900', textShadowColor: 'rgba(0, 0, 0, 0.20)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 20 },
   subheaderContainer: { width: '100%', paddingHorizontal: scaleX(100), paddingVertical: scaleY(5), justifyContent: 'center', alignItems: 'center', height: scaleY(33) },
   subheaderText: { color: '#FFFFFF', textAlign: 'center', fontSize: scaleY(18), fontWeight: '600' },
+  errorContainerWrapper: { width: '100%', alignItems: 'center', marginTop: scaleY(20), paddingHorizontal: scaleX(45), minHeight: scaleY(30) },
+  errorContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 65, 54, 0.1)', paddingVertical: scaleY(8), paddingHorizontal: scaleX(16), borderRadius: scaleY(8), borderWidth: 1, borderColor: 'rgba(255, 65, 54, 0.3)', gap: scaleX(8) },
+  messageText: { color: '#FF4136', textAlign: 'left', fontSize: scaleY(14), fontWeight: '700', flex: 1 },
   fieldContainer: { width: '100%', paddingHorizontal: scaleX(45), height: scaleY(92) },
   fieldLabel: { color: '#FFFFFF', fontSize: scaleY(15), fontWeight: '800', marginBottom: scaleY(8) },
   textFieldContainer: { width: '100%', height: scaleY(64), borderRadius: scaleY(12), borderWidth: scaleX(2), borderColor: '#D3DEE8', backgroundColor: '#FFFFFF', justifyContent: 'center' },
   fieldContent: { flexDirection: 'row', paddingHorizontal: scaleX(16), alignItems: 'center', gap: scaleX(12) },
   textInput: { flex: 1, color: '#64748B', fontFamily: 'Nunito Sans', fontSize: scaleY(18), fontWeight: '600', paddingVertical: 0, height: '100%' },
-  messageText: { color: '#FF4136', textAlign: 'center', fontSize: scaleY(14), fontWeight: '700' },
   buttonContainer: { width: '100%', paddingHorizontal: scaleX(40), height: scaleY(64) },
   supplementalContainer: { width: '100%', paddingHorizontal: scaleX(49), height: scaleY(44), justifyContent: 'center', alignItems: 'center' },
   supplementalText: { color: '#64748B', textAlign: 'center', fontSize: scaleY(14), fontWeight: '500', lineHeight: scaleY(20) },

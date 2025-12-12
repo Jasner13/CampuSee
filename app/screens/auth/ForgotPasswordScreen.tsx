@@ -13,7 +13,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { Svg, Path } from 'react-native-svg';
 import { useAuth } from '../../contexts/AuthContext';
-import PrimaryButton from '../../components/buttons/PrimaryButton'; // Adjust import path if needed
+import PrimaryButton from '../../components/buttons/PrimaryButton';
+import { Ionicons } from '@expo/vector-icons';
 
 const { height, width } = Dimensions.get('window');
 const DESIGN_HEIGHT = 896;
@@ -27,10 +28,24 @@ export default function ForgotPasswordScreen() {
   
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const validateEmail = (email: string) => {
+    // Strict format: firstname.lastname@cit.edu
+    const citRegex = /^[a-zA-Z0-9]+\.[a-zA-Z0-9]+@cit\.edu$/;
+    return citRegex.test(email);
+  };
 
   const handleSendReset = async () => {
+    setMessage('');
+
     if (!email) {
-      Alert.alert('Error', 'Please enter your email address.');
+      setMessage('Please enter your email address.');
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      setMessage('Please use a valid CIT email (firstname.lastname@cit.edu).');
       return;
     }
 
@@ -39,7 +54,7 @@ export default function ForgotPasswordScreen() {
     setLoading(false);
 
     if (error) {
-      Alert.alert('Error', error.message);
+      setMessage(error.message);
     } else {
       Alert.alert(
         'Check your email', 
@@ -81,7 +96,17 @@ export default function ForgotPasswordScreen() {
             </Text>
           </View>
 
-          <View style={styles.fieldContainer}>
+          {/* Top Error Display (System Log Style) */}
+          <View style={styles.errorContainerWrapper}>
+              {message ? (
+                  <View style={styles.errorContainer}>
+                      <Ionicons name="alert-circle" size={20} color="#FF4136" />
+                      <Text style={styles.messageText}>{message}</Text>
+                  </View>
+              ) : null}
+          </View>
+
+          <View style={[styles.fieldContainer, { marginTop: message ? scaleY(10) : scaleY(32) }]}>
             <Text style={styles.fieldLabel}>University Email</Text>
             <View style={styles.textField}>
               <View style={styles.fieldContent}>
@@ -92,7 +117,7 @@ export default function ForgotPasswordScreen() {
                 </Svg>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="lastname.firstname@cit.edu"
+                  placeholder="firstname.lastname@cit.edu"
                   placeholderTextColor="#64748B"
                   value={email}
                   onChangeText={setEmail}
@@ -127,8 +152,11 @@ const styles = StyleSheet.create({
   contentWrapper: { flex: 1, alignItems: 'center', width: '100%', paddingTop: scaleY(140) },
   headerContainer: { width: '100%', alignItems: 'center', marginBottom: scaleY(12) },
   headerText: { color: '#FFFFFF', fontSize: scaleY(32), fontWeight: '900', fontFamily: 'Nunito Sans' },
-  subheaderContainer: { width: '100%', paddingHorizontal: scaleX(60), alignItems: 'center', marginBottom: scaleY(40) },
+  subheaderContainer: { width: '100%', paddingHorizontal: scaleX(60), alignItems: 'center', marginBottom: scaleY(0) },
   subheaderText: { color: '#FFFFFF', textAlign: 'center', fontSize: scaleY(16), fontWeight: '500', fontFamily: 'Nunito Sans' },
+  errorContainerWrapper: { width: '100%', alignItems: 'center', marginTop: scaleY(20), paddingHorizontal: scaleX(45), minHeight: scaleY(30) },
+  errorContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 65, 54, 0.1)', paddingVertical: scaleY(8), paddingHorizontal: scaleX(16), borderRadius: scaleY(8), borderWidth: 1, borderColor: 'rgba(255, 65, 54, 0.3)', gap: scaleX(8) },
+  messageText: { color: '#FF4136', textAlign: 'left', fontSize: scaleY(14), fontWeight: '700', flex: 1 },
   fieldContainer: { width: '100%', paddingHorizontal: scaleX(45), marginBottom: scaleY(32) },
   fieldLabel: { color: '#FFFFFF', fontSize: scaleY(15), fontWeight: '800', marginBottom: scaleY(8), fontFamily: 'Nunito Sans' },
   textField: { width: '100%', height: scaleY(64), borderRadius: scaleY(12), borderWidth: 2, borderColor: '#D3DEE8', backgroundColor: '#FFFFFF', justifyContent: 'center' },

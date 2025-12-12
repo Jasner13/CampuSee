@@ -9,7 +9,6 @@ import {
   Dimensions,
   StyleProp,
   ViewStyle,
-  Platform, // Import Platform to handle OS specifics
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,7 +18,7 @@ import type { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import Svg, { Path } from 'react-native-svg';
 import MaskedView from '@react-native-masked-view/masked-view';
-import { Ionicons } from '@expo/vector-icons'; // Ensure this package is installed
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/colors';
 
 // --- Dynamic Layout Setup ---
@@ -114,6 +113,12 @@ export default function LoginScreen() {
     // State to toggle password visibility
     const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
+    const validateEmail = (email: string) => {
+        // Strict format: firstname.lastname@cit.edu
+        const citRegex = /^[a-zA-Z0-9]+\.[a-zA-Z0-9]+@cit\.edu$/;
+        return citRegex.test(email);
+    };
+
     const handleLogin = async () => {
         setMessage(''); 
         
@@ -122,12 +127,22 @@ export default function LoginScreen() {
             return;
         }
 
+        if (!validateEmail(email)) {
+            setMessage("Please use your university email (firstname.lastname@cit.edu).");
+            return;
+        }
+
         setLoading(true);
         const { error } = await login(email, password);
         setLoading(false);
 
         if (error) {
-            setMessage(error.message); 
+            // Unify error message for security and consistency
+            if (error.message.includes('Invalid login credentials') || error.message.includes('invalid_grant')) {
+                setMessage("Incorrect email or password.");
+            } else {
+                setMessage(error.message);
+            }
         }
     };
 
@@ -170,8 +185,18 @@ export default function LoginScreen() {
                             <Text style={styles.subheaderText}>Log in to your account</Text>
                         </View>
 
-                        {/* 2. Email Field */}
-                        <View style={styles.field1Container}>
+                        {/* 2. Top Error Display (System Log Style) */}
+                        <View style={styles.errorContainerWrapper}>
+                            {message ? (
+                                <View style={styles.errorContainer}>
+                                    <Ionicons name="alert-circle" size={20} color="#FF4136" />
+                                    <Text style={styles.messageText}>{message}</Text>
+                                </View>
+                            ) : null}
+                        </View>
+
+                        {/* 3. Email Field */}
+                        <View style={[styles.field1Container, { marginTop: message ? scaleY(16) : scaleY(64) }]}>
                             <Text style={styles.fieldLabel}>University Email</Text>
                             <View style={styles.textField}>
                                 <View style={styles.fieldContent}>
@@ -206,7 +231,7 @@ export default function LoginScreen() {
                             </View>
                         </View>
 
-                        {/* 3. Password Field */}
+                        {/* 4. Password Field */}
                         <View style={styles.field2Container}>
                             <Text style={styles.fieldLabel}>Password</Text>
                             <View style={styles.textField}>
@@ -234,21 +259,18 @@ export default function LoginScreen() {
                                         value={password}
                                         onChangeText={setPassword}
                                         secureTextEntry={!isPasswordVisible}
-                                        // CRITICAL: Disable all smart features to reduce lag/flicker
                                         autoCorrect={false}
                                         spellCheck={false}
-                                        textContentType="none" // iOS: Disable keychain lookups while typing
+                                        textContentType="none"
                                         autoCapitalize="none"
                                         keyboardType="default"
-                                        // Android: Disable autocomplete bar and autofill to prevent UI lag
                                         autoComplete="off" 
                                         importantForAutofill="no" 
                                     />
-                                    {/* Updated Icon: Uses Ionicons "eye" vs "eye-off" */}
                                     <TouchableOpacity 
                                         onPress={() => setIsPasswordVisible(!isPasswordVisible)}
                                         activeOpacity={0.7}
-                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} // Easier to tap
+                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                     >
                                         <Ionicons 
                                             name={isPasswordVisible ? "eye-off" : "eye"} 
@@ -260,7 +282,7 @@ export default function LoginScreen() {
                             </View>
                         </View>
                         
-                        {/* 4. Forgot Password */}
+                        {/* 5. Forgot Password */}
                         <View style={styles.forgotPasswordContainer}>
                             <TouchableOpacity 
                                 activeOpacity={0.7}
@@ -281,20 +303,8 @@ export default function LoginScreen() {
                             </TouchableOpacity>
                         </View>
                         
-                        {/* 5. Error Message */}
-                        {message ? (
-                            <Text style={[styles.messageText, { 
-                                marginTop: scaleY(20), 
-                                paddingHorizontal: scaleX(45) 
-                            }]}>
-                                {message}
-                            </Text>
-                        ) : null}
-
                         {/* 6. Log In Button */}
-                        <View style={[styles.loginButtonContainer, { 
-                            marginTop: message ? scaleY(24) : scaleY(60) 
-                        }]}>
+                        <View style={[styles.loginButtonContainer, { marginTop: scaleY(60) }]}>
                             <PrimaryButton
                                 onPress={handleLogin}
                                 disabled={loading}
@@ -396,12 +406,37 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         width: '200%',
     },
+    errorContainerWrapper: {
+        width: '100%',
+        alignItems: 'center',
+        marginTop: scaleY(20),
+        paddingHorizontal: scaleX(45),
+        minHeight: scaleY(30),
+    },
+    errorContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 65, 54, 0.1)',
+        paddingVertical: scaleY(8),
+        paddingHorizontal: scaleX(16),
+        borderRadius: scaleY(8),
+        borderWidth: 1,
+        borderColor: 'rgba(255, 65, 54, 0.3)',
+        gap: scaleX(8),
+    },
+    messageText: {
+        color: '#FF4136',
+        textAlign: 'left',
+        fontSize: scaleY(14),
+        fontWeight: '700',
+        flex: 1,
+    },
     field1Container: {
         width: '100%',
         height: scaleY(92),
         paddingHorizontal: scaleX(45),
         justifyContent: 'center',
-        marginTop: scaleY(64),
+        // marginTop dynamic based on error
     },
     field2Container: {
         width: '100%',
@@ -440,12 +475,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         paddingVertical: 0,
         height: scaleY(60),
-    },
-    messageText: {
-        color: '#FF4136',
-        textAlign: 'center',
-        fontSize: scaleY(16),
-        fontWeight: '700',
     },
     forgotPasswordContainer: {
         width: '100%',
