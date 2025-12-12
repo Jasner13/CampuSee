@@ -1,17 +1,63 @@
 // app/components/BottomNav.tsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
-import { BottomTabBarProps } from '@react-navigation/bottom-tabs'; // Import this
+import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { GRADIENTS, COLORS } from '../constants/colors';
 import { FONTS } from '../constants/fonts';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
-// Remove the old interface and use BottomTabBarProps
 export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }) => {
+  const { session } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
   
   // Helper to determine if a route is focused
   const isFocused = (index: number) => state.index === index;
+
+  // Fetch count of unique users who sent unread messages and subscribe to changes
+  useEffect(() => {
+    if (!session?.user) return;
+
+    const fetchUnread = async () => {
+      // Query to get distinct sender_ids for unread messages
+      const { data, error } = await supabase
+        .from('messages')
+        .select('sender_id')
+        .eq('receiver_id', session.user.id)
+        .eq('is_read', false);
+      
+      if (!error && data) {
+        // Count unique sender_ids using a Set
+        const uniqueSenders = new Set(data.map(msg => msg.sender_id));
+        setUnreadCount(uniqueSenders.size);
+      }
+    };
+
+    fetchUnread();
+
+    // Subscribe to realtime changes for the messages table
+    const channel = supabase
+      .channel('bottom_nav_unread_count')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen for INSERT (new msg) and UPDATE (marked as read)
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${session.user.id}`,
+        },
+        () => {
+          fetchUnread();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user]);
 
   // Helper to handle navigation
   const handlePress = (routeIndex: number, routeName: string) => {
@@ -67,9 +113,10 @@ export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, nav
         onPress={() => handlePress(1, 'Messages')} 
         activeOpacity={0.7}
       >
-        {isFocused(1) ? (
-          <>
-             <Svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+        {/* We wrap the icon in a view to position the badge relative to it */}
+        <View>
+          {isFocused(1) ? (
+            <Svg width="36" height="36" viewBox="0 0 36 36" fill="none">
               <Path d="M12 13.5H24M12 19.5H21M27 6C28.1935 6 29.3381 6.47411 30.182 7.31802C31.0259 8.16193 31.5 9.30653 31.5 10.5V22.5C31.5 23.6935 31.0259 24.8381 30.182 25.682C29.3381 26.5259 28.1935 27 27 27H19.5L12 31.5V27H9C7.80653 27 6.66193 26.5259 5.81802 25.682C4.97411 24.8381 4.5 23.6935 4.5 22.5V10.5C4.5 9.30653 4.97411 8.16193 5.81802 7.31802C6.66193 6.47411 7.80653 6 9 6H27Z" stroke="url(#msg_gradient)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
               <Defs>
                 <SvgLinearGradient id="msg_gradient" x1="6" y1="5" x2="30" y2="30">
@@ -78,16 +125,23 @@ export const BottomNav: React.FC<BottomTabBarProps> = ({ state, descriptors, nav
                 </SvgLinearGradient>
               </Defs>
             </Svg>
-            <Text style={styles.selectedText}>Messages</Text>
-          </>
-        ) : (
-          <>
+          ) : (
             <Svg width="36" height="36" viewBox="0 0 36 36" fill="none">
               <Path d="M12 13.5H24M12 19.5H21M27 6C28.1935 6 29.3381 6.47411 30.182 7.31802C31.0259 8.16193 31.5 9.30653 31.5 10.5V22.5C31.5 23.6935 31.0259 24.8381 30.182 25.682C29.3381 26.5259 28.1935 27 27 27H19.5L12 31.5V27H9C7.80653 27 6.66193 26.5259 5.81802 25.682C4.97411 24.8381 4.5 23.6935 4.5 22.5V10.5C4.5 9.30653 4.97411 8.16193 5.81802 7.31802C6.66193 6.47411 7.80653 6 9 6H27Z" stroke={COLORS.textTertiary} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
             </Svg>
-            <Text style={styles.unselectedText}>Messages</Text>
-          </>
-        )}
+          )}
+
+          {/* Unread Count Badge */}
+          {unreadCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </Text>
+            </View>
+          )}
+        </View>
+        
+        <Text style={isFocused(1) ? styles.selectedText : styles.unselectedText}>Messages</Text>
       </TouchableOpacity>
 
       {/* --- MIDDLE SPACER --- */}
@@ -231,5 +285,26 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sizes.xs,
     fontWeight: '400',
     color: COLORS.textTertiary,
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -6,
+    backgroundColor: '#FF3B30', // Standard red notification color
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    borderWidth: 1.5,
+    borderColor: COLORS.backgroundLight, // Match background to create a "cutout" effect
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
