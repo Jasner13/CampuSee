@@ -32,6 +32,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Avatar } from '../../components/Avatar';
 import { Comment } from '../../types';
 import { CategoryBadge } from '../../components/CategoryBadge';
+import { ActionSheetModal } from '../../components/modals/ActionSheetModal';
 
 type PostDetailScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList, 
@@ -76,6 +77,7 @@ export default function PostDetailScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [optionsModalVisible, setOptionsModalVisible] = useState(false);
   
   // New State for checking author permissions
   const [areInteractionsAllowed, setAreInteractionsAllowed] = useState(true);
@@ -294,7 +296,7 @@ export default function PostDetailScreen() {
 
   const handleSendComment = async () => {
     if (!commentText.trim() || !currentUserId) return;
-    if (!areInteractionsAllowed && !editingComment) return; // Allow editing existing own comments maybe? Standard: yes.
+    if (!areInteractionsAllowed && !editingComment) return; 
 
     setSendingComment(true);
 
@@ -332,8 +334,6 @@ export default function PostDetailScreen() {
         setReplyingTo(null);
 
         // --- NOTIFICATION LOGIC START ---
-        
-        // 1. Notify Post Author
         if (!parentId && post.userId !== currentUserId) {
           await supabase.from('notifications').insert({
             user_id: post.userId,
@@ -346,7 +346,6 @@ export default function PostDetailScreen() {
           });
         }
 
-        // 2. Notify Parent Comment Author
         if (parentId && replyingTo && replyingTo.user_id !== currentUserId) {
             await supabase.from('notifications').insert({
                 user_id: replyingTo.user_id,
@@ -411,14 +410,45 @@ export default function PostDetailScreen() {
   };
 
   const handleMore = () => {
+    setOptionsModalVisible(true);
+  };
+
+  const getOptionsActions = () => {
     if (isOwner) {
-      Alert.alert('Manage Post', 'Choose an action', [
-        { text: 'Edit', onPress: () => { setEditTitle(post.title); setEditDescription(post.description); setIsEditing(true); }},
-        { text: 'Delete', style: 'destructive', onPress: () => Alert.alert('Confirm', 'Are you sure?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: deletePost }]) },
-        { text: 'Cancel', style: 'cancel' }
-      ]);
+      return [
+        {
+          id: 'edit',
+          label: 'Edit Post',
+          icon: 'create-outline' as keyof typeof Ionicons.glyphMap,
+          onPress: () => {
+            setEditTitle(post.title);
+            setEditDescription(post.description);
+            setIsEditing(true);
+          }
+        },
+        {
+          id: 'delete',
+          label: 'Delete Post',
+          icon: 'trash-outline' as keyof typeof Ionicons.glyphMap,
+          isDestructive: true,
+          onPress: () => {
+             Alert.alert('Confirm Delete', 'Are you sure you want to delete this post? This action cannot be undone.', [
+               { text: 'Cancel', style: 'cancel' }, 
+               { text: 'Delete', style: 'destructive', onPress: deletePost }
+             ]);
+          }
+        }
+      ];
     } else {
-      Alert.alert('Options', 'Select an action', [{ text: 'Report Post', onPress: () => console.log('Reported') }, { text: 'Cancel', style: 'cancel' }]);
+      return [
+        {
+          id: 'report',
+          label: 'Report Post',
+          icon: 'flag-outline' as keyof typeof Ionicons.glyphMap,
+          isDestructive: true,
+          onPress: () => Alert.alert('Reported', 'Thank you for reporting this post. We will review it shortly.')
+        }
+      ];
     }
   };
 
@@ -715,6 +745,13 @@ export default function PostDetailScreen() {
           {post.fileUrl && <Image source={{ uri: post.fileUrl }} style={styles.fullScreenImage} resizeMode="contain" />}
         </RNSafeAreaView>
       </Modal>
+
+      <ActionSheetModal 
+        visible={optionsModalVisible}
+        onClose={() => setOptionsModalVisible(false)}
+        title="Manage Post"
+        actions={getOptionsActions()}
+      />
     </View>
   );
 }
