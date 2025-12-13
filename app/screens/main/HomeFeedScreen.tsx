@@ -10,8 +10,8 @@ import {
   ActivityIndicator, 
   DeviceEventEmitter,
   Image,
-  FlatList, // <--- Added
-  ListRenderItem // <--- Added
+  FlatList,
+  ListRenderItem
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect, CompositeNavigationProp } from '@react-navigation/native';
@@ -36,7 +36,7 @@ type HomeFeedScreenNavigationProp = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
-const PAGE_SIZE = 10; // <--- Pagination Size
+const PAGE_SIZE = 10;
 
 const getRelativeTime = (dateString: string) => {
   const date = new Date(dateString);
@@ -65,13 +65,14 @@ export const HomeFeedScreen: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('all');
   
   const [posts, setPosts] = useState<Post[]>([]);
+  const [foundUsers, setFoundUsers] = useState<any[]>([]); // <--- New State for User Search
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false); // <--- New State
+  const [loadingMore, setLoadingMore] = useState(false);
   
   // Pagination State
-  const [page, setPage] = useState(0); // <--- New State
-  const [hasMore, setHasMore] = useState(true); // <--- New State
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
 
   // Modal States
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -90,6 +91,24 @@ export const HomeFeedScreen: React.FC = () => {
     if (pageNumber > 0) setLoadingMore(true);
 
     try {
+      // --- 1. SEARCH USERS (Only on initial load/search) ---
+      if (pageNumber === 0) {
+        if (searchText.trim()) {
+           const { data: usersData, error: usersError } = await supabase
+              .from('profiles')
+              .select('id, full_name, avatar_url, program')
+              .ilike('full_name', `%${searchText}%`)
+              .limit(10); // Limit user results
+           
+           if (!usersError && usersData) {
+              setFoundUsers(usersData);
+           }
+        } else {
+           setFoundUsers([]); // Clear users if search is cleared
+        }
+      }
+
+      // --- 2. FETCH POSTS ---
       const from = pageNumber * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
@@ -103,7 +122,7 @@ export const HomeFeedScreen: React.FC = () => {
           comments(count)
         `)
         .order('created_at', { ascending: false })
-        .range(from, to); // <--- Implement Pagination
+        .range(from, to);
 
       if (selectedCategory !== 'all') {
         query = query.eq('category', selectedCategory);
@@ -237,7 +256,7 @@ export const HomeFeedScreen: React.FC = () => {
 
   // Footer for loading more
   const renderFooter = () => {
-    if (!loadingMore) return <View style={{ height: 20 }} />; // Padding from your file
+    if (!loadingMore) return <View style={{ height: 20 }} />; 
     return (
       <View style={{ paddingVertical: 20, paddingBottom: 20 }}>
         <ActivityIndicator size="small" color={COLORS.primary} />
@@ -245,10 +264,57 @@ export const HomeFeedScreen: React.FC = () => {
     );
   };
 
+  // Header for Search Results (Users)
+  const renderListHeader = () => {
+    if (foundUsers.length === 0) return null;
+
+    return (
+      <View style={styles.foundUsersSection}>
+        <Text style={styles.sectionTitle}>People</Text>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          contentContainerStyle={styles.usersScrollContent}
+        >
+          {foundUsers.map((user) => (
+            <TouchableOpacity 
+              key={user.id} 
+              style={styles.userCard}
+              onPress={() => handleUserPress(user.id)}
+              activeOpacity={0.7}
+            >
+              {user.avatar_url ? (
+                <Image source={{ uri: user.avatar_url }} style={styles.userCardAvatar} />
+              ) : (
+                <LinearGradient
+                  colors={GRADIENTS.primary}
+                  style={styles.userCardAvatarPlaceholder}
+                >
+                  <Text style={styles.userCardInitials}>
+                    {getInitials(user.full_name)}
+                  </Text>
+                </LinearGradient>
+              )}
+              <Text style={styles.userCardName} numberOfLines={1}>{user.full_name}</Text>
+              <Text style={styles.userCardProgram} numberOfLines={1}>
+                {user.program || 'Student'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <View style={styles.sectionDivider} />
+      </View>
+    );
+  };
+
   const renderEmptyComponent = () => (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyStateText}>No posts found.</Text>
-      <Text style={styles.emptyStateSubText}>Be the first to post!</Text>
+      <Text style={styles.emptyStateText}>
+        {searchText ? 'No posts found.' : 'No posts yet.'}
+      </Text>
+      <Text style={styles.emptyStateSubText}>
+        {searchText ? 'Try searching for something else.' : 'Be the first to post!'}
+      </Text>
     </View>
   );
 
@@ -294,7 +360,7 @@ export const HomeFeedScreen: React.FC = () => {
       </LinearGradient>
 
       <View style={styles.searchContainer}>
-        <SearchBar value={searchText} onChangeText={setSearchText} placeholder="Search..." />
+        <SearchBar value={searchText} onChangeText={setSearchText} placeholder="Search posts or people..." />
       </View>
 
       <View style={styles.categoryContainer}>
@@ -336,6 +402,7 @@ export const HomeFeedScreen: React.FC = () => {
             }
             onEndReached={handleLoadMore}
             onEndReachedThreshold={0.5}
+            ListHeaderComponent={renderListHeader} // <--- Added Header for Users
             ListFooterComponent={renderFooter}
             ListEmptyComponent={renderEmptyComponent}
             initialNumToRender={10}
@@ -457,7 +524,6 @@ const styles = StyleSheet.create({
   feedContent: {
     padding: 18,
     gap: 8,
-    // paddingBottom handled in ListFooterComponent logic
   },
   emptyState: {
     alignItems: 'center',
@@ -473,5 +539,64 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textSecondary,
     marginTop: 8,
+  },
+  // --- USER SEARCH STYLES ---
+  foundUsersSection: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 12,
+    marginLeft: 4,
+  },
+  usersScrollContent: {
+    paddingHorizontal: 4,
+    gap: 12,
+    paddingBottom: 8,
+  },
+  userCard: {
+    alignItems: 'center',
+    width: 80,
+  },
+  userCardAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginBottom: 6,
+    backgroundColor: COLORS.background,
+  },
+  userCardAvatarPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginBottom: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  userCardInitials: {
+    color: COLORS.textLight,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  userCardName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    textAlign: 'center',
+    width: '100%',
+  },
+  userCardProgram: {
+    fontSize: 10,
+    color: COLORS.textTertiary,
+    textAlign: 'center',
+    width: '100%',
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: '#D3DEE8',
+    marginTop: 12,
+    marginHorizontal: 4,
   }
 });
