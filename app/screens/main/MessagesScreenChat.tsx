@@ -25,6 +25,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Avatar } from '../../components/Avatar';
 import { Message } from '../../types';
 import { Ionicons } from '@expo/vector-icons';
+import { ActionSheetModal } from '../../components/modals/ActionSheetModal';
 
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -91,6 +92,7 @@ export default function MessagesScreenChat() {
   } | null>(null);
 
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const [attachmentModalVisible, setAttachmentModalVisible] = useState(false);
 
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -273,15 +275,7 @@ export default function MessagesScreenChat() {
   };
 
   const handleAttachmentButtonPress = () => {
-    Alert.alert(
-      "Send Attachment",
-      "Choose what to send",
-      [
-        { text: "Photo or Video", onPress: pickMedia },
-        { text: "Document", onPress: pickDocument },
-        { text: "Cancel", style: "cancel" }
-      ]
-    );
+    setAttachmentModalVisible(true);
   };
 
   const uploadAttachmentToSupabase = async (): Promise<string | null> => {
@@ -359,7 +353,7 @@ export default function MessagesScreenChat() {
             title: tempPost.title,
             description: tempPost.description,
             thumbnail: tempPost.fileUrl,
-            postAuthor: tempPost.postAuthor, // <--- SAVED HERE
+            postAuthor: tempPost.postAuthor, 
             caption: finalContent
         };
         finalContent = JSON.stringify(shareData);
@@ -735,6 +729,26 @@ export default function MessagesScreenChat() {
             </TouchableOpacity>
           </View>
         </View>
+
+        <ActionSheetModal
+            visible={attachmentModalVisible}
+            onClose={() => setAttachmentModalVisible(false)}
+            title="Send Attachment"
+            actions={[
+                {
+                    id: 'media',
+                    label: 'Photo or Video',
+                    icon: 'image-outline',
+                    onPress: pickMedia
+                },
+                {
+                    id: 'file',
+                    label: 'Document',
+                    icon: 'document-text-outline',
+                    onPress: pickDocument
+                }
+            ]}
+        />
       </KeyboardAvoidingView>
     </View>
   );
